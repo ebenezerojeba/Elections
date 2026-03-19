@@ -1,0 +1,88 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html {
+    font-family: 'DM Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-slate-50 text-ink-900 min-h-screen;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Syne', sans-serif;
+  }
+}
+
+@layer components {
+  /* ── Buttons ─────────────────────────────────────────── */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 font-body font-medium
+           rounded-xl transition-all duration-200 focus:outline-none
+           disabled:opacity-50 disabled:cursor-not-allowed select-none;
+  }
+  .btn-primary {
+    @apply btn bg-ink-900 text-white px-6 py-3 text-sm
+           hover:bg-ink-700 active:scale-[0.98]
+           focus:shadow-glow;
+  }
+  .btn-ghost {
+    @apply btn text-ink-500 px-4 py-2 text-sm
+           hover:bg-slate-100 hover:text-ink-900;
+  }
+  .btn-danger {
+    @apply btn bg-alert-500 text-white px-6 py-3 text-sm
+           hover:bg-alert-600 active:scale-[0.98];
+  }
+  .btn-outline {
+    @apply btn border border-slate-200 text-ink-700 px-6 py-3 text-sm
+           hover:border-ink-900 hover:text-ink-900 active:scale-[0.98];
+  }
+
+  /* ── Inputs ──────────────────────────────────────────── */
+  .input {
+    @apply w-full px-4 py-3 rounded-xl border border-slate-200
+           bg-white text-ink-900 placeholder-slate-400
+           font-body text-sm transition-all duration-150
+           focus:outline-none focus:border-ink-900 focus:shadow-glow
+           disabled:bg-slate-50 disabled:text-slate-400;
+  }
+  .input-error {
+    @apply border-alert-500 focus:shadow-error;
+  }
+  .label {
+    @apply block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide;
+  }
+  .field-error {
+    @apply text-xs text-alert-500 mt-1.5 flex items-center gap-1;
+  }
+
+  /* ── Cards ───────────────────────────────────────────── */
+  .card {
+    @apply bg-white rounded-2xl shadow-card border border-slate-100 p-6;
+  }
+  .card-sm {
+    @apply bg-white rounded-xl shadow-card border border-slate-100 p-4;
+  }
+
+  /* ── Status badges ───────────────────────────────────── */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium;
+  }
+  .badge-pending  { @apply badge bg-gold-50  text-gold-700; }
+  .badge-verified { @apply badge bg-vote-50  text-vote-700; }
+  .badge-rejected { @apply badge bg-alert-50 text-alert-500; }
+
+  /* ── Live indicator ──────────────────────────────────── */
+  .live-dot {
+    @apply w-2 h-2 rounded-full bg-vote-500 animate-pulse-dot;
+  }
+}

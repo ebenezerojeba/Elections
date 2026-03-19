@@ -1,0 +1,15 @@
+{
+  "name": "elections",
+  "version": "1.0.0",
+  "main": "index.js",
+"scripts": {
+  "dev":    "npx concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\" \"npm run dev --prefix admin\"",
+  "server": "npm run dev --prefix server",
+  "client": "npm run dev --prefix client",
+  "admin":  "npm run dev --prefix admin"
+},
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
+}
