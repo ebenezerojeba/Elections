@@ -22,7 +22,7 @@ app.set('io', io);
 // ─── Security & utility middleware ──────────────────────────────────────────
 app.use(helmet());
 
-const allowedOrigins = process.env.CLIENT_ORIGINS?.split(',') || ['http://localhost:5173'];
+const allowedOrigins = process.env.CLIENT_ORIGINS?.split(',') || ['http://localhost:5173', 'http://localhost:5174'] ;
 app.use(cors({
   origin: (origin, cb) => {
     if (!origin || allowedOrigins.includes(origin)) return cb(null, true);

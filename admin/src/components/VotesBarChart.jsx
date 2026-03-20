@@ -25,7 +25,7 @@ export default function VotesBarChart({ parties = [] }) {
 
   return (
     <div className="card">
-      <h2 className="font-display font-bold text-ink-900 mb-6">Vote distribution</h2>
+      <h2 className="font-display font-bold text-ink-500 mb-6">Vote distribution</h2>
       <ResponsiveContainer width="100%" height={240}>
         <BarChart data={data} barCategoryGap="30%" margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f2f5" />
