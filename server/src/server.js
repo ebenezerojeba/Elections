@@ -16,7 +16,6 @@ import { errorHandler } from './middleware/errorHandler.js';
 const app = express();
 const httpServer = createServer(app);
 
-// Attach Socket.io to the HTTP server; store io on app for controller access
 const io = initSocket(httpServer);
 app.set('io', io);
 
@@ -26,7 +25,6 @@ app.use(helmet());
 const allowedOrigins = process.env.CLIENT_ORIGINS?.split(',') || ['http://localhost:5173'];
 app.use(cors({
   origin: (origin, cb) => {
-    // Allow requests with no origin (Postman, server-to-server)
     if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
     cb(new Error(`Origin ${origin} not allowed by CORS`));
   },
@@ -37,7 +35,6 @@ app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Global rate limit: 200 req / 15 min per IP
 app.use(rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 200,
@@ -46,21 +43,38 @@ app.use(rateLimit({
 }));
 
 // ─── Routes ─────────────────────────────────────────────────────────────────
-app.use('/api/auth',    authRoutes);
-app.use('/api/results', resultsRoutes);
+app.get('/', (_req, res) =>
+  res.json({ status: 'ok', service: 'Elections API', version: '1.0.0' })
+);
 
-// Health check — useful for Render/Vercel uptime pings
 app.get('/api/health', (_req, res) =>
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 );
 
-// 404 handler for unknown routes
+app.use('/api/auth',    authRoutes);
+app.use('/api/results', resultsRoutes);
+
+// ─── 404 — must be after all real routes ────────────────────────────────────
 app.use((_req, res) =>
   res.status(404).json({ success: false, message: 'Route not found' })
 );
 
-// ─── Central error handler (must be last) ───────────────────────────────────
+// ─── Central error handler — must be last ───────────────────────────────────
 app.use(errorHandler);
+
+// ─── Keep-alive self-ping (prevents Render free tier spin-down) ─────────────
+const SELF_URL = process.env.SELF_URL || 'https://electionsbackend-zt4s.onrender.com/api/health';
+
+const keepAlive = () => {
+  setInterval(async () => {
+    try {
+      const res = await fetch(SELF_URL);
+      console.log(`[keep-alive] ping ${res.status} — ${new Date().toISOString()}`);
+    } catch (err) {
+      console.warn('[keep-alive] ping failed:', err.message);
+    }
+  }, 10 * 60 * 1000); // every 10 minutes
+};
 
 // ─── Start ───────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
@@ -71,6 +85,10 @@ const start = async () => {
     console.log(`🚀 Server running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
     console.log(`🔌 Socket.io ready`);
   });
+
+  if (process.env.NODE_ENV === 'production') {
+    keepAlive();
+  }
 };
 
 start();

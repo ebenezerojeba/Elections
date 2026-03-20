@@ -139,13 +139,13 @@ export default function LoginPage() {
 
           {/* Public dashboard link */}
           <div className="mt-8 pt-6 border-t border-slate-100 text-center">
-            <Link
+            <L
               to="/dashboard"
               className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-ink-900 transition-colors"
             >
               <span className="live-dot" />
               View live public dashboard
-            </Link>
+            </L>
           </div>
         </div>
       </div>
