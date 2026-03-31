@@ -3,10 +3,14 @@ import {
   submitResult, getResults, getSummary,
   getResultById, updateStatus,
 } from '../controllers/resultsController.js';
-import { protect, authorize } from '../middleware/auth.js';
+import { protect, authorize, requireAdmin } from '../middleware/auth.js';
 import { resultRules, validate } from '../middleware/validators.js';
 import { upload } from '../config/cloudinary.js';
 import rateLimit from 'express-rate-limit';
+import { getLcdas, getWardsByLcda } from '../controllers/LcdaController.js';
+
+// ── NEW: LCDA + Ward controllers ─────────────────────────────────────────────
+// import { getLcdas, getWardsByLcda } from '../controllers/lcdaController.js'
 
 const router = Router();
 
@@ -16,8 +20,6 @@ const submitLimiter = rateLimit({
   message: { success: false, message: 'Submission rate limit reached' },
 });
 
-// Parses the results JSON string from FormData into a real array
-// so express-validator's isArray() check passes
 const parseResultsField = (req, _res, next) => {
   if (req.body.results && typeof req.body.results === 'string') {
     try {
@@ -29,6 +31,11 @@ const parseResultsField = (req, _res, next) => {
   next();
 };
 
+// ── NEW: LCDA + Ward routes (public — called before login) ───────────────────
+router.get('/lcdas',            getLcdas);
+router.get('/lcdas/:id/wards',  getWardsByLcda);
+
+// ── Existing routes — unchanged ──────────────────────────────────────────────
 router.get('/',        getResults);
 router.get('/summary', getSummary);
 router.get('/:id',     getResultById);
@@ -38,12 +45,12 @@ router.post(
   protect,
   submitLimiter,
   upload.single('image'),
-  parseResultsField,       // ← parse before validation
+  parseResultsField,
   resultRules,
   validate,
   submitResult
 );
 
-router.patch('/:id/status', protect, authorize('admin'), updateStatus);
+router.patch('/:id/status', protect, requireAdmin, updateStatus);
 
 export default router;

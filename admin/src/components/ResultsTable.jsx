@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { partyColor } from '../utils/partyColors';
+import StatusControl from './StatusControl';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -297,7 +298,14 @@ function MobileCard({ r, isNewest, isExpanded, onToggle }) {
             }}>
               {(r.totalVotes || 0).toLocaleString()}
             </div>
-            <StatusBadge status={r.status} />
+     <StatusControl
+  resultId={r._id}
+  status={r.status}
+  onUpdated={(newStatus) => {
+    // optional: update local results state so the row
+    // reflects the change without a full refetch
+  }}
+/>
           </div>
           <Chevron open={isExpanded} />
         </div>
@@ -725,7 +733,14 @@ export default function ResultsTable({ results = [], newestId = null }) {
 
                         {/* Status */}
                         {showStatus && (
-                          <td style={tdX}><StatusBadge status={r.status} /></td>
+                          <td style={tdX}><StatusControl
+  resultId={r._id}
+  status={r.status}
+  onUpdated={(newStatus) => {
+    // optional: update local results state so the row
+    // reflects the change without a full refetch
+  }}
+/></td>
                         )}
 
                         {/* Submitted */}
