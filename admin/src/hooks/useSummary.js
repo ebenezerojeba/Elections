@@ -1,29 +1,4 @@
 
-/**
- * hooks/useSummary.js
- *
- * Fetches aggregated election summary + raw results list.
- *
- * Usage:
- *   useSummary(refreshKey)                          → all-Lagos totals
- *   useSummary(refreshKey, { scope: 'lcda', id })   → one LCDA
- *   useSummary(refreshKey, { scope: 'ward', id })   → one ward
- *
- * Expected API response shape:
- *   GET /api/summary?scope=lcda&id=<id>
- *   {
- *     parties:        [{ party: 'APC', totalVotes: 1234 }, ...],
- *     grandTotal:     5678,
- *     reportingUnits: 12,          // count of wards that submitted
- *   }
- *
- *   GET /api/results?scope=lcda&id=<id>&page=1&limit=200
- *   {
- *     results: [...],
- *     total:   42,
- *   }
- */
-
 import { useState, useEffect, useRef } from 'react';
 
 const BASE = import.meta.env.VITE_API_URL || '';   // e.g. 'https://api.yoursite.com'

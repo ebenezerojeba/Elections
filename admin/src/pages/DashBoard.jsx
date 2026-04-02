@@ -1,1009 +1,20 @@
-// import { useState, useEffect, useRef } from 'react';
-// import { formatDistanceToNow, format } from 'date-fns';
-// import { useSocket }  from '../hooks/useSocket';
-// import { useSummary } from '../hooks/useSummary';
-// import VotesBarChart  from '../components/VotesBarChart';
-// import VotesPieChart  from '../components/VotesPieChart';
-// import LiveFeed       from '../components/LiveFeed';
-// import ResultsTable   from '../components/ResultsTable';
 
-// // ─── Global styles ────────────────────────────────────────────────────────────
-// const STYLE_ID = 'apc-warroom-v4';
-// if (typeof document !== 'undefined' && !document.getElementById(STYLE_ID)) {
-//   const s = document.createElement('style');
-//   s.id = STYLE_ID;
-//   s.textContent = `
-//     @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=DM+Mono:wght@300;400;500&display=swap');
-
-//     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-//     :root {
-//       --apc-green:  #1A6B3A;
-//       --apc-mid:    #145730;
-//       --apc-dark:   #0D3D20;
-//       --apc-gold:   #C9A84C;
-//       --apc-gold2:  #E8C76A;
-//       --apc-light:  #B8DFC8;
-//       --bg:         #060E09;
-//       --surface:    #0C1A10;
-//       --surface-2:  #112016;
-//       --surface-3:  #162B1C;
-//       --border:     rgba(26,107,58,0.22);
-//       --border-2:   rgba(26,107,58,0.42);
-//       --muted:      rgba(184,223,200,0.42);
-//       --text:       #D4EDE0;
-//       --mono:       'DM Mono', monospace;
-//       --display:    'Bricolage Grotesque', sans-serif;
-//     }
-
-//     body { overflow-x: hidden; }
-
-//     body::after {
-//       content: '';
-//       position: fixed; inset: 0; z-index: 9999; pointer-events: none;
-//       background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='0.025'/%3E%3C/svg%3E");
-//     }
-
-//     @keyframes pulse-ring {
-//       0%   { transform: scale(1);   opacity: 0.9; }
-//       100% { transform: scale(2.8); opacity: 0; }
-//     }
-//     @keyframes slide-up {
-//       from { opacity: 0; transform: translateY(12px); }
-//       to   { opacity: 1; transform: translateY(0); }
-//     }
-//     @keyframes bar-in {
-//       from { width: 0; }
-//       to   { width: var(--w); }
-//     }
-//     @keyframes count-flash {
-//       0%,100% { color: var(--text); }
-//       50%     { color: var(--apc-gold2); }
-//     }
-//     @keyframes border-flash {
-//       0%,100% { border-color: var(--border); }
-//       45%     { border-color: var(--apc-gold); box-shadow: 0 0 24px rgba(201,168,76,0.18); }
-//     }
-//     @keyframes shimmer {
-//       0%   { background-position: -200% 0; }
-//       100% { background-position:  200% 0; }
-//     }
-//     @keyframes ticker-scroll {
-//       from { transform: translateX(0); }
-//       to   { transform: translateX(-50%); }
-//     }
-//     @keyframes blink {
-//       0%,100% { opacity: 1; }
-//       50%     { opacity: 0.25; }
-//     }
-//     @keyframes new-row {
-//       from { background: rgba(201,168,76,0.1); }
-//       to   { background: transparent; }
-//     }
-
-//     .apc-slide-up  { animation: slide-up 0.48s cubic-bezier(0.22,1,0.36,1) both; }
-//     .apc-bar       { animation: bar-in 1.2s cubic-bezier(0.22,1,0.36,1) both; animation-delay: var(--delay,0ms); }
-//     .apc-flash     { animation: border-flash 0.7s ease 2; }
-//     .apc-count-pop { animation: count-flash 0.5s ease; }
-//     .apc-new-row   { animation: new-row 3.5s ease forwards; }
-
-//     ::-webkit-scrollbar             { width: 4px; height: 4px; }
-//     ::-webkit-scrollbar-track       { background: var(--surface); }
-//     ::-webkit-scrollbar-thumb       { background: var(--apc-mid); border-radius: 4px; }
-//     ::-webkit-scrollbar-thumb:hover { background: var(--apc-green); }
-
-//     .ticker-track { display: flex; animation: ticker-scroll 35s linear infinite; width: max-content; }
-//     .ticker-track:hover { animation-play-state: paused; }
-//   `;
-//   document.head.appendChild(s);
-// }
-
-// // ─── useWindowSize ────────────────────────────────────────────────────────────
-// // Single source of truth for all layout decisions in this file.
-// // xs < 480 | sm 480–767 | md 768–1023 | lg 1024+
-
-// function useWindowSize() {
-//   const [w, setW] = useState(
-//     typeof window !== 'undefined' ? window.innerWidth : 1280
-//   );
-//   useEffect(() => {
-//     const handler = () => setW(window.innerWidth);
-//     window.addEventListener('resize', handler, { passive: true });
-//     return () => window.removeEventListener('resize', handler);
-//   }, []);
-//   const bp = w < 480 ? 'xs' : w < 768 ? 'sm' : w < 1024 ? 'md' : 'lg';
-//   return { w, bp, xs: bp === 'xs', sm: bp === 'sm', md: bp === 'md', lg: bp === 'lg',
-//     mobile: w < 768, tablet: w >= 768 && w < 1024, desktop: w >= 1024 };
-// }
-
-// // ─── Party colours ────────────────────────────────────────────────────────────
-// const PARTY_PALETTE = {
-//   APC:  { bar: '#1A6B3A', glow: 'rgba(26,107,58,0.55)',  label: '#4ADE80' },
-//   PDP:  { bar: '#1d4ed8', glow: 'rgba(29,78,216,0.45)',  label: '#93C5FD' },
-//   LP:   { bar: '#b45309', glow: 'rgba(180,83,9,0.45)',   label: '#FCD34D' },
-//   NNPP: { bar: '#7c3aed', glow: 'rgba(124,58,237,0.45)', label: '#C4B5FD' },
-// };
-// const FALLBACKS = [
-//   { bar: '#0e7490', glow: 'rgba(14,116,144,0.4)',  label: '#67E8F9' },
-//   { bar: '#be185d', glow: 'rgba(190,24,93,0.4)',   label: '#F9A8D4' },
-//   { bar: '#4d7c0f', glow: 'rgba(77,124,15,0.4)',   label: '#BEF264' },
-//   { bar: '#92400e', glow: 'rgba(146,64,14,0.4)',   label: '#FDE68A' },
-// ];
-// const partyColor = (party, rank) =>
-//   PARTY_PALETTE[(party || '').toUpperCase().trim()] || FALLBACKS[rank % FALLBACKS.length];
-
-// // ─── APCMark ──────────────────────────────────────────────────────────────────
-// function APCMark({ size = 60 }) {
-//   return (
-//     <svg width={size} height={size * 1.1} viewBox="0 0 200 220" fill="none"
-//       xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
-//       <rect x="10"  y="10" width="60"  height="160" fill="#009A44"/>
-//       <rect x="70"  y="10" width="60"  height="160" fill="#FFFFFF"/>
-//       <rect x="130" y="10" width="60"  height="160" fill="#87CEEB"/>
-//       <rect x="10"  y="10" width="180" height="160" fill="none" stroke="#ccc" strokeWidth="0.5"/>
-//       {[
-//         [62,20,2.2],[68,18,2],[74,16,1.8],[80,14,1.8],
-//         [86,13,2],[91,12,2.2],[96,12,2.4],[100,12,2.8],
-//         [104,12,2.4],[109,12,2.2],[114,13,2],[120,14,1.8],
-//         [126,16,1.8],[132,18,2],[138,20,2.2],
-//       ].map(([x2, y2, sw], i) => (
-//         <line key={i} x1="100" y1="115" x2={x2} y2={y2}
-//           stroke={i % 2 === 0 ? '#C8A96E' : '#D4B87A'}
-//           strokeWidth={sw} strokeLinecap="round"/>
-//       ))}
-//       <rect x="91" y="108" width="18" height="8"  rx="3" fill="#8B6914" opacity="0.9"/>
-//       <rect x="89" y="114" width="22" height="7"  rx="3" fill="#7A5C10" opacity="0.85"/>
-//       <ellipse cx="100" cy="132" rx="13" ry="16" fill="#8B5E3C"/>
-//       <ellipse cx="87"  cy="127" rx="6"  ry="4.5" fill="#9B6E4C" transform="rotate(-20,87,127)"/>
-//       <ellipse cx="93"  cy="120" rx="4" ry="3" fill="#7A4E2C" opacity="0.5"/>
-//       <ellipse cx="100" cy="118" rx="4" ry="3" fill="#7A4E2C" opacity="0.5"/>
-//       <ellipse cx="107" cy="120" rx="4" ry="3" fill="#7A4E2C" opacity="0.5"/>
-//       <rect x="89" y="144" width="22" height="22" rx="5" fill="#8B5E3C"/>
-//       <rect x="87" y="160" width="26" height="8"  rx="3" fill="#6B4224" opacity="0.7"/>
-//       <rect x="10" y="170" width="180" height="40" fill="#CC1E1E"/>
-//       <text x="100" y="198" textAnchor="middle"
-//         fontFamily="Arial Black, Arial, sans-serif"
-//         fontSize="28" fontWeight="900" fill="#FFFFFF" letterSpacing="4">APC</text>
-//     </svg>
-//   );
-// }
-
-// // ─── LivePulse ────────────────────────────────────────────────────────────────
-// function LivePulse({ active }) {
-//   return (
-//     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
-//       <span style={{ position: 'relative', width: 9, height: 9, flexShrink: 0 }}>
-//         <span style={{
-//           display: 'block', width: 9, height: 9, borderRadius: '50%',
-//           background: active ? '#4ADE80' : '#374151',
-//           boxShadow: active ? '0 0 8px #4ADE8099' : 'none',
-//         }} />
-//         {active && (
-//           <span style={{
-//             position: 'absolute', inset: 0, borderRadius: '50%',
-//             border: '1.5px solid #4ADE80',
-//             animation: 'pulse-ring 1.7s ease-out infinite',
-//           }} />
-//         )}
-//       </span>
-//       <span style={{
-//         fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.14em',
-//         textTransform: 'uppercase', fontWeight: 500,
-//         color: active ? '#4ADE80' : '#4B5563',
-//       }}>
-//         {active ? 'Live' : 'Offline'}
-//       </span>
-//     </span>
-//   );
-// }
-
-// // ─── SectionHeader ────────────────────────────────────────────────────────────
-// function SectionHeader({ label, right }) {
-//   return (
-//     <div style={{
-//       display: 'flex', alignItems: 'center',
-//       justifyContent: 'space-between', marginBottom: 18,
-//     }}>
-//       <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-//         <span style={{
-//           display: 'block', width: 3, height: 13, borderRadius: 2,
-//           background: 'var(--apc-gold)', boxShadow: '0 0 8px rgba(201,168,76,0.45)',
-//         }} />
-//         <span style={{
-//           fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.18em',
-//           textTransform: 'uppercase', color: 'var(--apc-gold)', fontWeight: 500,
-//         }}>
-//           {label}
-//         </span>
-//       </div>
-//       {right && (
-//         <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)' }}>
-//           {right}
-//         </span>
-//       )}
-//     </div>
-//   );
-// }
-
-// // ─── StatBlock ────────────────────────────────────────────────────────────────
-// function StatBlock({ label, value, sub, accent, flash, index = 0 }) {
-//   const fmt = typeof value === 'number' ? value.toLocaleString() : (value ?? '—');
-//   return (
-//     <div
-//       className={`apc-slide-up${flash ? ' apc-flash' : ''}`}
-//       style={{
-//         animationDelay: `${index * 80}ms`,
-//         padding: '18px 20px 16px',
-//         background: 'var(--surface)',
-//         border: '1px solid var(--border)',
-//         borderRadius: 8,
-//         position: 'relative', overflow: 'hidden',
-//         transition: 'border-color 0.4s, box-shadow 0.4s',
-//       }}
-//     >
-//       <span style={{
-//         position: 'absolute', top: 0, left: 0, right: 0, height: .5,
-//         background: accent || 'var(--apc-green)', borderRadius: '10px 10px 0 0',
-//       }} />
-//       <p style={{
-//         fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.16em',
-//         textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8,
-//       }}>
-//         {label}
-//       </p>
-//       <p
-//         className={flash ? 'apc-count-pop' : ''}
-//         style={{
-//           fontFamily: 'var(--display)',
-//           fontSize: 'clamp(20px, 2.5vw, 32px)',
-//           fontWeight: 800, color: 'var(--text)',
-//           lineHeight: 1, letterSpacing: '-0.03em',
-//         }}
-//       >
-//         {fmt}
-//       </p>
-//       {sub && (
-//         <p style={{
-//           fontFamily: 'var(--mono)', fontSize: 10,
-//           color: 'var(--muted)', marginTop: 6, lineHeight: 1.5,
-//         }}>
-//           {sub}
-//         </p>
-//       )}
-//     </div>
-//   );
-// }
-
-// // ─── VoteBar ──────────────────────────────────────────────────────────────────
-// function VoteBar({ party, votes, total, rank, delay, isLeader }) {
-//   const pct = total > 0 ? (votes / total) * 100 : 0;
-//   const { bar, glow, label } = partyColor(party, rank);
-//   return (
-//     <div className="apc-slide-up" style={{ animationDelay: `${delay}ms`, marginBottom: 18 }}>
-//       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-//         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-//           {isLeader && (
-//             <span style={{
-//               fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.1em',
-//               background: 'var(--apc-gold)', color: '#060E09',
-//               padding: '2px 7px', borderRadius: 3, fontWeight: 600,
-//               textTransform: 'uppercase',
-//             }}>Leading</span>
-//           )}
-//           <span style={{ fontFamily: 'var(--display)', fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
-//             {party}
-//           </span>
-//         </div>
-//         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-//           <span style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 500, color: label }}>
-//             {votes.toLocaleString()}
-//           </span>
-//           <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)' }}>
-//             {pct.toFixed(1)}%
-//           </span>
-//         </div>
-//       </div>
-//       <div style={{ height: 5, background: 'rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden' }}>
-//         <div className="apc-bar" style={{
-//           '--w': `${pct}%`, '--delay': `${delay + 200}ms`,
-//           width: `${pct}%`, height: '100%', background: bar,
-//           borderRadius: 3, boxShadow: `0 0 10px ${glow}`,
-//         }} />
-//       </div>
-//     </div>
-//   );
-// }
-
-// // ─── LeaderRow ────────────────────────────────────────────────────────────────
-// function LeaderRow({ rank, party, votes, total, delay }) {
-//   const pct = total > 0 ? ((votes / total) * 100).toFixed(1) : '0.0';
-//   const { bar, label } = partyColor(party, rank - 1);
-//   return (
-//     <div className="apc-slide-up" style={{
-//       animationDelay: `${delay}ms`,
-//       display: 'grid', gridTemplateColumns: '24px 1fr auto',
-//       alignItems: 'center', gap: 10,
-//       padding: '9px 0', borderBottom: '1px solid var(--border)',
-//     }}>
-//       <span style={{
-//         fontFamily: 'var(--mono)', fontSize: 11, textAlign: 'center',
-//         color: rank === 1 ? 'var(--apc-gold)' : 'var(--muted)',
-//         fontWeight: rank === 1 ? 600 : 400,
-//       }}>
-//         {rank === 1 ? '◆' : `#${rank}`}
-//       </span>
-//       <div>
-//         <p style={{ fontFamily: 'var(--display)', fontSize: 12, fontWeight: 700, color: rank === 1 ? label : 'var(--text)' }}>
-//           {party}
-//         </p>
-//         <div style={{ marginTop: 4, height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.05)', overflow: 'hidden' }}>
-//           <div className="apc-bar" style={{ '--w': `${pct}%`, '--delay': `${delay + 300}ms`, width: `${pct}%`, height: '100%', background: bar }} />
-//         </div>
-//       </div>
-//       <div style={{ textAlign: 'right' }}>
-//         <p style={{ fontFamily: 'var(--mono)', fontSize: 12, color: label, fontWeight: 500 }}>
-//           {votes.toLocaleString()}
-//         </p>
-//         <p style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--muted)', marginTop: 2 }}>
-//           {pct}%
-//         </p>
-//       </div>
-//     </div>
-//   );
-// }
-
-// // ─── Ticker ───────────────────────────────────────────────────────────────────
-// function Ticker({ parties, grandTotal }) {
-//   if (!parties.length) return null;
-//   const items = [...parties, ...parties];
-//   return (
-//     <div style={{ overflow: 'hidden', background: 'var(--apc-dark)', borderBottom: '1px solid var(--border)' }}>
-//       <div className="ticker-track" style={{ padding: '6px 0' }}>
-//         {items.map((p, i) => {
-//           const pct = grandTotal > 0 ? ((p.totalVotes / grandTotal) * 100).toFixed(1) : '0.0';
-//           const { label } = partyColor(p.party, i % parties.length);
-//           return (
-//             <span key={i} style={{
-//               display: 'inline-flex', alignItems: 'center', gap: 6,
-//               padding: '0 20px', borderRight: '1px solid var(--border)',
-//               fontFamily: 'var(--mono)', fontSize: 10, whiteSpace: 'nowrap',
-//             }}>
-//               <span style={{ fontWeight: 600, color: label }}>{p.party}</span>
-//               <span style={{ color: 'var(--text)' }}>{p.totalVotes.toLocaleString()}</span>
-//               <span style={{ color: 'var(--muted)' }}>({pct}%)</span>
-//             </span>
-//           );
-//         })}
-//       </div>
-//     </div>
-//   );
-// }
-
-// // ─── Skeleton ─────────────────────────────────────────────────────────────────
-// function Skeleton({ h = 120, delay = 0 }) {
-//   return (
-//     <div style={{
-//       height: h, borderRadius: 12,
-//       background: 'linear-gradient(90deg, var(--surface) 25%, var(--surface-2) 50%, var(--surface) 75%)',
-//       backgroundSize: '200% 100%',
-//       animation: 'shimmer 1.9s ease infinite',
-//       animationDelay: `${delay}ms`,
-//     }} />
-//   );
-// }
-
-// // ─── Panel wrapper — consistent card style ────────────────────────────────────
-// function Panel({ children, style }) {
-//   return (
-//     <div style={{
-//       background: 'var(--surface)',
-//       border: '1px solid var(--border)',
-//       borderRadius: 14,
-//       padding: '20px',
-//       ...style,
-//     }}>
-//       {children}
-//     </div>
-//   );
-// }
-
-// // ═════════════════════════════════════════════════════════════════════════════
-// //  DASHBOARD
-// // ═════════════════════════════════════════════════════════════════════════════
-// export default function Dashboard() {
-//   const { mobile, tablet, desktop, bp } = useWindowSize();
-
-//   const [refreshKey, setRefreshKey] = useState(0);
-//   const [newestId,   setNewestId]   = useState(null);
-//   const [flashStats, setFlashStats] = useState(false);
-//   const [lastUpdate, setLastUpdate] = useState(null);
-//   const [eventLog,   setEventLog]   = useState([]);
-//   const [clock,      setClock]      = useState(new Date());
-//   const flashTimer = useRef(null);
-
-//   const { connected, newResult, updatedResult } = useSocket();
-//   const { summary, results, loading, error }    = useSummary(refreshKey);
-
-//   useEffect(() => {
-//     const t = setInterval(() => setClock(new Date()), 1000);
-//     return () => clearInterval(t);
-//   }, []);
-
-//   useEffect(() => {
-//     if (!newResult) return;
-//     setRefreshKey(k => k + 1);
-//     setNewestId(newResult.result?._id || null);
-//     setLastUpdate(new Date());
-//     setFlashStats(true);
-//     setEventLog(log => [newResult.result, ...log].slice(0, 25));
-//     clearTimeout(flashTimer.current);
-//     flashTimer.current = setTimeout(() => setFlashStats(false), 2500);
-//   }, [newResult]);
-
-//   useEffect(() => {
-//     if (!updatedResult) return;
-//     setRefreshKey(k => k + 1);
-//   }, [updatedResult]);
-
-//   useEffect(() => () => clearTimeout(flashTimer.current), []);
-
-//   const parties        = summary?.parties        || [];
-//   const grandTotal     = summary?.grandTotal     || 0;
-//   const reportingUnits = summary?.reportingUnits || 0;
-//   const leader         = parties[0];
-//   const apcData        = parties.find(p => (p.party || '').toUpperCase() === 'APC');
-//   const apcPct         = grandTotal > 0 && apcData
-//     ? ((apcData.totalVotes / grandTotal) * 100).toFixed(1) : null;
-
-//   // Responsive tokens
-//   const px  = mobile ? 16 : 24;           // horizontal page padding
-//   const gap = mobile ? 10 : 14;           // grid gap
-//   const panelPad = mobile ? '16px' : '22px 24px';
-
-//   return (
-//     <div style={{
-//       minHeight: '100vh',
-//       background: 'var(--bg)',
-//       color: 'var(--text)',
-//       fontFamily: 'var(--mono)',
-//       overflowX: 'hidden',
-//     }}>
-
-//       {/* ═══ HEADER ══════════════════════════════════════════════════ */}
-//       <header style={{
-//         position: 'sticky', top: 0, zIndex: 100,
-//         background: 'rgba(6,14,9,0.96)',
-//         borderBottom: '1px solid var(--border-2)',
-//         backdropFilter: 'blur(16px)',
-//       }}>
-//         {mobile ? (
-//           // ── Mobile header: 2 rows ──
-//           <div style={{ padding: '0 16px' }}>
-//             {/* Row 1: brand + live pulse */}
-//             <div style={{
-//               height: 52, display: 'flex',
-//               alignItems: 'center', justifyContent: 'space-between',
-//             }}>
-//               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-//                 <APCMark size={26} />
-//                 <div>
-//                   <p style={{
-//                     fontFamily: 'var(--display)', fontWeight: 800, fontSize: 14,
-//                     color: 'var(--text)', letterSpacing: '-0.02em', lineHeight: 1.1,
-//                   }}>
-//                     APC Results Centre
-//                   </p>
-//                   <p style={{
-//                     fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--muted)',
-//                     letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: 1,
-//                   }}>
-//                     All Progressives Congress
-//                   </p>
-//                 </div>
-//               </div>
-//               <LivePulse active={connected} />
-//             </div>
-
-//             {/* Row 2: APC stat pill + clock — only when data exists */}
-//             {apcData && (
-//               <div style={{
-//                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-//                 paddingBottom: 10, gap: 10,
-//               }}>
-//                 <div style={{
-//                   display: 'flex', alignItems: 'center', gap: 12,
-//                   padding: '6px 14px',
-//                   background: 'rgba(26,107,58,0.1)',
-//                   border: '1px solid rgba(26,107,58,0.28)',
-//                   borderRadius: 8, flex: 1,
-//                 }}>
-//                   <div>
-//                     <p style={{
-//                       fontFamily: 'var(--display)', fontSize: 17, fontWeight: 800,
-//                       color: '#4ADE80', letterSpacing: '-0.03em', lineHeight: 1,
-//                     }}>
-//                       {apcData.totalVotes.toLocaleString()}
-//                     </p>
-//                     <p style={{ fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--muted)', marginTop: 1 }}>
-//                       APC VOTES
-//                     </p>
-//                   </div>
-//                   {apcPct && (
-//                     <>
-//                       <span style={{ width: 1, height: 24, background: 'var(--border-2)' }} />
-//                       <div>
-//                         <p style={{
-//                           fontFamily: 'var(--display)', fontSize: 17, fontWeight: 800,
-//                           color: 'var(--apc-gold)', letterSpacing: '-0.03em', lineHeight: 1,
-//                         }}>
-//                           {apcPct}%
-//                         </p>
-//                         <p style={{ fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--muted)', marginTop: 1 }}>
-//                           SHARE
-//                         </p>
-//                       </div>
-//                     </>
-//                   )}
-//                 </div>
-//                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
-//                   <p style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
-//                     {format(clock, 'HH:mm:ss')}
-//                   </p>
-//                   <p style={{ fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--muted)', marginTop: 1 }}>
-//                     {format(clock, 'dd MMM yyyy')}
-//                   </p>
-//                 </div>
-//               </div>
-//             )}
-//           </div>
-//         ) : (
-//           // ── Desktop/tablet header: single row ──
-//           <div style={{
-//             maxWidth: 1600, margin: '0 auto', padding: `0 ${px}px`,
-//             height: 58,
-//             display: 'flex', alignItems: 'center',
-//             justifyContent: 'space-between', gap: 16,
-//           }}>
-//             {/* Brand */}
-//             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-//               <APCMark size={32} />
-//               <div>
-//                 <p style={{
-//                   fontFamily: 'var(--display)', fontWeight: 800, fontSize: 16,
-//                   color: 'var(--text)', letterSpacing: '-0.02em', lineHeight: 1.1,
-//                 }}>
-//                   APC Results Centre
-//                 </p>
-//                 <p style={{
-//                   fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--muted)',
-//                   letterSpacing: '0.14em', textTransform: 'uppercase', marginTop: 1,
-//                 }}>
-//                   All Progressives Congress
-//                 </p>
-//               </div>
-//             </div>
-
-//             {/* APC stat pill */}
-//             {apcData && (
-//               <div style={{
-//                 display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0,
-//                 padding: '8px 20px',
-//                 background: 'rgba(26,107,58,0.1)',
-//                 border: '1px solid rgba(26,107,58,0.28)',
-//                 borderRadius: 10,
-//               }}>
-//                 <div style={{ textAlign: 'center' }}>
-//                   <p style={{
-//                     fontFamily: 'var(--display)', fontSize: 21, fontWeight: 800,
-//                     color: '#4ADE80', letterSpacing: '-0.03em', lineHeight: 1,
-//                   }}>
-//                     {apcData.totalVotes.toLocaleString()}
-//                   </p>
-//                   <p style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--muted)', marginTop: 2 }}>
-//                     APC VOTES
-//                   </p>
-//                 </div>
-//                 {apcPct && (
-//                   <>
-//                     <span style={{ width: 1, height: 28, background: 'var(--border-2)', flexShrink: 0 }} />
-//                     <div style={{ textAlign: 'center' }}>
-//                       <p style={{
-//                         fontFamily: 'var(--display)', fontSize: 21, fontWeight: 800,
-//                         color: 'var(--apc-gold)', letterSpacing: '-0.03em', lineHeight: 1,
-//                       }}>
-//                         {apcPct}%
-//                       </p>
-//                       <p style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--muted)', marginTop: 2 }}>
-//                         VOTE SHARE
-//                       </p>
-//                     </div>
-//                   </>
-//                 )}
-//               </div>
-//             )}
-
-//             {/* Clock + status */}
-//             <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
-//               <div style={{ textAlign: 'right' }}>
-//                 <p style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 500, color: 'var(--text)', letterSpacing: '-0.01em' }}>
-//                   {format(clock, 'HH:mm:ss')}
-//                 </p>
-//                 <p style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--muted)', marginTop: 1 }}>
-//                   {format(clock, 'dd MMM yyyy')}
-//                 </p>
-//               </div>
-//               <span style={{ width: 1, height: 28, background: 'var(--border)' }} />
-//               <LivePulse active={connected} />
-//             </div>
-//           </div>
-//         )}
-//       </header>
-
-//       {/* ═══ TICKER ═══════════════════════════════════════════════════ */}
-//       <Ticker parties={parties} grandTotal={grandTotal} />
-
-//       {/* ═══ HERO BAND ════════════════════════════════════════════════ */}
-//       <div style={{
-//         background: 'linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%)',
-//         borderBottom: '1px solid var(--border)',
-//         padding: mobile ? '24px 16px 20px' : '36px 24px 32px',
-//         position: 'relative', overflow: 'hidden',
-//       }}>
-//         {/* Watermark — hidden on mobile to avoid clutter */}
-//         {!mobile && (
-//           <div style={{
-//             position: 'absolute', right: -20, top: '50%',
-//             transform: 'translateY(-50%)',
-//             display: 'flex', flexDirection: 'column', alignItems: 'center',
-//             opacity: 0.07, pointerEvents: 'none', userSelect: 'none', zIndex: 0,
-//           }}>
-//             <svg width={220} height={230} viewBox="0 0 200 220" fill="none">
-//               {[
-//                 [56,14,3.2],[63,12,3],[70,10,2.8],[77,9,2.6],[84,8,2.6],
-//                 [91,7,2.8],[96,7,3],[100,6,3.4],[104,7,3],[109,7,2.8],
-//                 [116,8,2.6],[123,9,2.6],[130,10,2.8],[137,12,3],[144,14,3.2],
-//               ].map(([x2, y2, sw], i) => (
-//                 <line key={i} x1="100" y1="118" x2={x2} y2={y2}
-//                   stroke="#fff" strokeWidth={sw} strokeLinecap="round" />
-//               ))}
-//               <rect x="90" y="110" width="20" height="9" rx="3" fill="#fff" opacity="0.9"/>
-//               <rect x="88" y="117" width="24" height="8" rx="3" fill="#fff" opacity="0.7"/>
-//               <ellipse cx="100" cy="136" rx="14" ry="17" fill="#fff"/>
-//               <ellipse cx="86"  cy="130" rx="7"  ry="5"  fill="#fff" transform="rotate(-18,86,130)"/>
-//               <rect x="89" y="149" width="22" height="24" rx="5" fill="#fff"/>
-//             </svg>
-//             <span style={{
-//               fontFamily: 'var(--display)', fontWeight: 800,
-//               fontSize: 'clamp(80px, 10vw, 140px)',
-//               lineHeight: 1, color: '#ffffff',
-//               letterSpacing: '-0.04em', marginTop: -16,
-//             }}>APC</span>
-//           </div>
-//         )}
-
-//         <div style={{ maxWidth: 1600, margin: '0 auto', position: 'relative' }}>
-//           <p style={{
-//             fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.22em',
-//             textTransform: 'uppercase', color: 'var(--apc-gold)',
-//             marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8,
-//           }}>
-//             <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 1, background: 'var(--apc-gold)' }} />
-//             General Election
-//           </p>
-
-//           <div style={{
-//             display: 'flex', flexWrap: 'wrap',
-//             alignItems: 'flex-end',
-//             justifyContent: 'space-between', gap: 20,
-//           }}>
-//             <div style={{ minWidth: 0 }}>
-//               <h1 style={{
-//                 fontFamily: 'var(--display)',
-//                 fontSize: mobile ? 'clamp(26px, 7vw, 36px)' : 'clamp(28px, 4vw, 52px)',
-//                 fontWeight: 800, lineHeight: 1.02,
-//                 letterSpacing: '-0.04em', color: 'var(--text)',
-//               }}>
-//                 Live Election{mobile ? ' ' : <br />}
-//                 <span style={{ color: 'var(--apc-gold)', textShadow: '0 0 40px rgba(201,168,76,0.22)' }}>
-//                   Results Dashboard
-//                 </span>
-//               </h1>
-//               {leader && (
-//                 <p style={{
-//                   marginTop: 12, fontFamily: 'var(--mono)',
-//                   fontSize: mobile ? 11 : 12,
-//                   color: 'var(--muted)', lineHeight: 1.8,
-//                 }}>
-//                   Current leader —{' '}
-//                   <span style={{ color: partyColor(leader.party, 0).label, fontWeight: 500 }}>{leader.party}</span>
-//                   {' · '}
-//                   <span style={{ color: 'var(--text)' }}>{leader.totalVotes.toLocaleString()} votes</span>
-//                   {grandTotal > 0 && <span> ({((leader.totalVotes / grandTotal) * 100).toFixed(1)}%)</span>}
-//                   {lastUpdate && !mobile && (
-//                     <span style={{ marginLeft: 14 }}>
-//                       · Updated {formatDistanceToNow(lastUpdate, { addSuffix: true })}
-//                     </span>
-//                   )}
-//                 </p>
-//               )}
-//             </div>
-
-//             {/* Party pills — scroll horizontally on mobile */}
-//             {parties.length > 0 && (
-//               <div style={{
-//                 display: 'flex', gap: 8,
-//                 flexWrap: mobile ? 'nowrap' : 'wrap',
-//                 overflowX: mobile ? 'auto' : 'visible',
-//                 paddingBottom: mobile ? 4 : 0,
-//                 width: mobile ? '100%' : 'auto',
-//                 // hide scrollbar on mobile — they can still scroll
-//                 scrollbarWidth: 'none',
-//               }}>
-//                 {parties.slice(0, mobile ? 4 : 5).map((p, i) => {
-//                   const { bar, label } = partyColor(p.party, i);
-//                   const isAPC = (p.party || '').toUpperCase() === 'APC';
-//                   return (
-//                     <div key={p.party} style={{
-//                       padding: mobile ? '10px 14px' : '14px 20px',
-//                       textAlign: 'center',
-//                       minWidth: mobile ? 72 : 88,
-//                       flexShrink: 0,
-//                       background: isAPC ? 'rgba(26,107,58,0.18)' : 'var(--surface)',
-//                       border: `1px solid ${isAPC ? 'rgba(26,107,58,0.55)' : 'var(--border)'}`,
-//                       borderTop: `0px solid ${bar}`,
-//                       borderRadius: 10,
-//                     }}>
-//                       <p style={{
-//                         fontFamily: 'var(--display)',
-//                         fontSize: mobile ? 15 : 19,
-//                         fontWeight: 800, color: label,
-//                         letterSpacing: '-0.03em', lineHeight: 1,
-//                       }}>
-//                         {p.totalVotes.toLocaleString()}
-//                       </p>
-//                       <p style={{
-//                         fontFamily: 'var(--mono)',
-//                         fontSize: mobile ? 9 : 10,
-//                         marginTop: 4, letterSpacing: '0.1em',
-//                         color: isAPC ? 'var(--apc-light)' : 'var(--muted)',
-//                         fontWeight: isAPC ? 500 : 400,
-//                       }}>
-//                         {p.party}
-//                       </p>
-//                     </div>
-//                   );
-//                 })}
-//               </div>
-//             )}
-//           </div>
-//         </div>
-//       </div>
-
-//       {/* ═══ MAIN CONTENT ════════════════════════════════════════════ */}
-//       <main style={{
-//         maxWidth: 1600, margin: '0 auto',
-//         padding: mobile ? `20px ${px}px 60px` : `28px ${px}px 80px`,
-//       }}>
-
-//         {/* Error */}
-//         {error && (
-//           <div style={{
-//             marginBottom: 16, padding: '10px 14px',
-//             background: 'rgba(220,38,38,0.08)',
-//             border: '1px solid rgba(220,38,38,0.2)',
-//             borderRadius: 10, fontSize: 12, color: '#FCA5A5',
-//             display: 'flex', gap: 8, alignItems: 'center',
-//           }}>
-//             ⚠ Failed to load results — {error}
-//           </div>
-//         )}
-
-//         {/* ── Stat row ── */}
-//         <div style={{
-//           display: 'grid',
-//           gridTemplateColumns: mobile
-//             ? 'repeat(2, 1fr)'
-//             : 'repeat(auto-fit, minmax(190px, 1fr))',
-//           gap: mobile ? 8 : 12,
-//           marginBottom: mobile ? 16 : 24,
-//         }}>
-//           <StatBlock label="Total votes" value={grandTotal}
-//             sub={`${reportingUnits} unit${reportingUnits !== 1 ? 's' : ''} reporting`}
-//             accent="var(--apc-green)" flash={flashStats} index={0} />
-//           <StatBlock label="Units reporting" value={reportingUnits}
-//             sub="Results submitted" accent="var(--apc-gold)" flash={flashStats} index={1} />
-//           <StatBlock label="Parties" value={parties.length}
-//             sub="Contested" accent="#3b82f6" index={2} />
-//           {leader ? (
-//             <StatBlock label="Leader" value={leader.party}
-//               sub={`${leader.totalVotes.toLocaleString()} · ${grandTotal > 0 ? ((leader.totalVotes / grandTotal) * 100).toFixed(1) : 0}%`}
-//               accent={partyColor(leader.party, 0).bar} flash={flashStats} index={3} />
-//           ) : (
-//             <StatBlock label="Leader" value="—" sub="Awaiting results" index={3} />
-//           )}
-//         </div>
-
-//         {/* Loading skeletons */}
-//         {loading && (
-//           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-//             {[160, 220, 140].map((h, i) => <Skeleton key={i} h={h} delay={i * 120} />)}
-//           </div>
-//         )}
-
-//         {!loading && (
-//           <div style={{ display: 'flex', flexDirection: 'column', gap }}>
-
-//             {/* ── Row 1: Vote share + Standings ── */}
-//             <div style={{
-//               display: 'grid',
-//               // stacked on mobile, side-by-side on tablet+
-//               gridTemplateColumns: mobile ? '1fr' : 'minmax(0,1.5fr) minmax(0,1fr)',
-//               gap,
-//             }}>
-//               <Panel style={{ padding: panelPad }}>
-//                 <SectionHeader label="Vote share" right={`${parties.length} parties`} />
-//                 {parties.length === 0
-//                   ? <p style={{ fontSize: 12, color: 'var(--muted)', padding: '16px 0' }}>No data yet.</p>
-//                   : parties.map((p, i) => (
-//                     <VoteBar key={p.party} party={p.party} votes={p.totalVotes}
-//                       total={grandTotal} rank={i} delay={i * 90} isLeader={i === 0} />
-//                   ))
-//                 }
-//               </Panel>
-//               <Panel style={{ padding: panelPad }}>
-//                 <SectionHeader label="Party standings" />
-//                 {parties.length === 0
-//                   ? <p style={{ fontSize: 12, color: 'var(--muted)', padding: '16px 0' }}>No data yet.</p>
-//                   : parties.slice(0, mobile ? 5 : 8).map((p, i) => (
-//                     <LeaderRow key={p.party} rank={i + 1} party={p.party}
-//                       votes={p.totalVotes} total={grandTotal} delay={i * 70} />
-//                   ))
-//                 }
-//               </Panel>
-//             </div>
-
-//             {/* ── Row 2: Charts ── */}
-//             <div style={{
-//               display: 'grid',
-//               gridTemplateColumns: mobile ? '1fr' : 'minmax(0,1.6fr) minmax(0,1fr)',
-//               gap,
-//             }}>
-//               <Panel style={{ padding: panelPad }}>
-//                 <SectionHeader label="Votes by party" right="Bar chart" />
-//                 <VotesBarChart parties={parties} />
-//               </Panel>
-//               <Panel style={{ padding: panelPad }}>
-//                 <SectionHeader label="Vote distribution" right="Pie chart" />
-//                 <VotesPieChart parties={parties} grandTotal={grandTotal} />
-//               </Panel>
-//             </div>
-
-//             {/* ── Row 3: Live feed + Table ── */}
-//             {/* On mobile the feed is shown compactly above the table */}
-//             <div style={{
-//               display: 'grid',
-//               gridTemplateColumns: mobile ? '1fr' : 'minmax(0,1fr) minmax(0,2fr)',
-//               gap,
-//               // Give the row a fixed height only on desktop so both panels scroll independently
-//               ...(desktop ? { alignItems: 'start' } : {}),
-//             }}>
-//               <Panel style={{
-//                 padding: panelPad,
-//                 ...(mobile
-//                   ? { maxHeight: 340 }
-//                   : { maxHeight: 480, display: 'flex', flexDirection: 'column', overflow: 'hidden' }
-//                 ),
-//               }}>
-//                 <LiveFeed
-//                   results={eventLog.length > 0 ? eventLog : results.slice(0, 15)}
-//                   newestId={newestId}
-//                 />
-//               </Panel>
-
-//               <Panel style={{
-//                 padding: panelPad,
-//                 ...(mobile
-//                   ? {}
-//                   : { maxHeight: 480, display: 'flex', flexDirection: 'column', overflow: 'hidden' }
-//                 ),
-//               }}>
-//                 <SectionHeader label="All submitted results" right={`${results.length} records`} />
-//                 <div style={{ overflowY: 'auto', flex: 1 }}>
-//                   <ResultsTable results={results} newestId={newestId} />
-//                 </div>
-//               </Panel>
-//             </div>
-
-//           </div>
-//         )}
-
-//         {/* Empty state */}
-//         {!loading && results.length === 0 && !error && (
-//           <div style={{
-//             marginTop: 24,
-//             padding: mobile ? '48px 16px' : '80px 24px',
-//             textAlign: 'center',
-//             background: 'var(--surface)',
-//             border: '1px solid var(--border)',
-//             borderRadius: 16,
-//           }}>
-//             <div style={{ marginBottom: 16, display: 'inline-block' }}>
-//               <APCMark size={mobile ? 40 : 52} />
-//             </div>
-//             <h3 style={{
-//               fontFamily: 'var(--display)',
-//               fontSize: mobile ? 20 : 24,
-//               fontWeight: 800, color: 'var(--text)',
-//               marginBottom: 10, letterSpacing: '-0.02em',
-//             }}>
-//               Awaiting First Results
-//             </h3>
-//             <p style={{
-//               fontFamily: 'var(--mono)', fontSize: 12,
-//               color: 'var(--muted)', maxWidth: 320,
-//               margin: '0 auto', lineHeight: 1.8,
-//             }}>
-//               As field agents submit results from their polling units, they will appear here in real-time.
-//             </p>
-//             <div style={{ marginTop: 20 }}>
-//               <LivePulse active={connected} />
-//             </div>
-//           </div>
-//         )}
-//       </main>
-
-//       {/* ═══ FOOTER ══════════════════════════════════════════════════ */}
-//       <footer style={{
-//         borderTop: '1px solid var(--border)',
-//         background: 'var(--surface)',
-//         padding: mobile ? '12px 16px' : '14px 24px',
-//       }}>
-//         <div style={{
-//           maxWidth: 1600, margin: '0 auto',
-//           display: 'flex', alignItems: 'center',
-//           justifyContent: 'space-between',
-//           flexWrap: 'wrap', gap: 8,
-//         }}>
-//           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-//             <APCMark size={mobile ? 16 : 20} />
-//             <span style={{
-//               fontFamily: 'var(--display)', fontWeight: 700,
-//               fontSize: mobile ? 11 : 13, color: 'var(--text)',
-//             }}>
-//               APC Results Centre
-//             </span>
-//             {!mobile && (
-//               <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)' }}>
-//                 All Progressives Congress · Nigeria
-//               </span>
-//             )}
-//           </div>
-//           <div style={{
-//             display: 'flex', alignItems: 'center',
-//             gap: mobile ? 12 : 20,
-//             fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)',
-//           }}>
-//             <LivePulse active={connected} />
-//             <span>{reportingUnits} unit{reportingUnits !== 1 ? 's' : ''}</span>
-//             <span>{format(clock, mobile ? 'HH:mm' : 'HH:mm · dd MMM yyyy')}</span>
-//           </div>
-//         </div>
-//       </footer>
-//     </div>
-//   );
-// }
-
-
-
-
-
-
-
-
-
-
-
-
+/**
+ * pages/Dashboard.jsx  (admin view)
+ *
+ * Full-featured election command centre:
+ *  - Statewide summary stats (APC total, margin, vote share, reporting wards)
+ *  - Live scrolling ticker with per-party totals
+ *  - LCDA → Ward scope filter (cascading)
+ *  - LGATable: click-to-expand LGA rows revealing all ward-level results
+ *  - Vote-share bars + summary charts
+ *  - Live feed of most-recent submissions
+ *  - Socket-powered real-time updates with flash animations
+ *  - Fully responsive (mobile → 4K)
+ *
+ * Drop-in replacement for your existing Dashboard.jsx.
+ * Preserves all existing hook/component imports.
+ */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { formatDistanceToNow, format } from 'date-fns';
@@ -1013,48 +24,53 @@ import VotesBarChart  from '../components/VotesBarChart';
 import VotesPieChart  from '../components/VotesPieChart';
 import LiveFeed       from '../components/LiveFeed';
 import ResultsTable   from '../components/ResultsTable';
+import LGATable       from '../components/LGATable';   // ← new component
 
-// ─── Inject global styles once ───────────────────────────────────────────────
-const STYLE_ID = 'apc-warroom-v5';
+// ─── Global style injection (font + keyframes) ────────────────────────────────
+const STYLE_ID = 'apc-dashboard-v6';
 if (typeof document !== 'undefined' && !document.getElementById(STYLE_ID)) {
   const s = document.createElement('style');
   s.id = STYLE_ID;
   s.textContent = `
-    @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=DM+Mono:wght@300;400;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=JetBrains+Mono:wght@300;400;500;700&display=swap');
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --apc-green:  #1A6B3A;
-      --apc-mid:    #145730;
-      --apc-dark:   #0D3D20;
-      --apc-gold:   #C9A84C;
-      --apc-gold2:  #E8C76A;
-      --apc-light:  #B8DFC8;
-      --bg:         #060E09;
-      --surface:    #0C1A10;
-      --surface-2:  #112016;
-      --surface-3:  #162B1C;
-      --border:     rgba(26,107,58,0.22);
-      --border-2:   rgba(26,107,58,0.42);
-      --muted:      rgba(184,223,200,0.42);
-      --text:       #D4EDE0;
-      --mono:       'DM Mono', monospace;
-      --display:    'Bricolage Grotesque', sans-serif;
+      --green:       #006B35;
+      --green2:      #008C45;
+      --gold:        #C9A84C;
+      --gold2:       #E8C76A;
+      --bg:          #04080A;
+      --surface:     #081210;
+      --surface-2:   #0C1A14;
+      --surface-3:   #112119;
+      --border:      rgba(0,107,53,0.16);
+      --border-2:    rgba(0,107,53,0.35);
+      --muted:       rgba(180,220,200,0.42);
+      --text:        #D0EDDC;
+      --mono:        'JetBrains Mono', monospace;
+      --display:     'Syne', sans-serif;
     }
 
-    body { overflow-x: hidden; }
+    body { overflow-x: hidden; background: var(--bg); }
+    body::before {
+      content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background:
+        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(0,107,53,0.1), transparent),
+        radial-gradient(ellipse 40% 30% at 90% 85%,  rgba(201,168,76,0.04), transparent);
+    }
     body::after {
-      content: ''; position: fixed; inset: 0; z-index: 9999; pointer-events: none;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='0.025'/%3E%3C/svg%3E");
+      content: ''; position: fixed; inset: 0; z-index: 9999; pointer-events: none; opacity: 0.02;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     }
 
     @keyframes pulse-ring {
-      0%   { transform: scale(1);   opacity: 0.9; }
-      100% { transform: scale(2.8); opacity: 0; }
+      0%   { transform: scale(1); opacity: 1; }
+      100% { transform: scale(2.6); opacity: 0; }
     }
     @keyframes slide-up {
-      from { opacity: 0; transform: translateY(12px); }
+      from { opacity: 0; transform: translateY(14px); }
       to   { opacity: 1; transform: translateY(0); }
     }
     @keyframes bar-in {
@@ -1063,11 +79,11 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLE_ID)) {
     }
     @keyframes count-flash {
       0%,100% { color: var(--text); }
-      50%     { color: var(--apc-gold2); }
+      50%     { color: var(--gold2); }
     }
     @keyframes border-flash {
       0%,100% { border-color: var(--border); }
-      45%     { border-color: var(--apc-gold); box-shadow: 0 0 24px rgba(201,168,76,0.18); }
+      45%     { border-color: var(--gold); box-shadow: 0 0 24px rgba(201,168,76,0.15); }
     }
     @keyframes shimmer {
       0%   { background-position: -200% 0; }
@@ -1077,26 +93,24 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLE_ID)) {
       from { transform: translateX(0); }
       to   { transform: translateX(-50%); }
     }
-    @keyframes new-row {
+    @keyframes new-ward {
       from { background: rgba(201,168,76,0.1); }
       to   { background: transparent; }
     }
 
-    .apc-slide-up  { animation: slide-up 0.48s cubic-bezier(0.22,1,0.36,1) both; }
-    .apc-bar       { animation: bar-in 1.2s cubic-bezier(0.22,1,0.36,1) both; animation-delay: var(--delay,0ms); }
-    .apc-flash     { animation: border-flash 0.7s ease 2; }
-    .apc-count-pop { animation: count-flash 0.5s ease; }
-    .apc-new-row   { animation: new-row 3.5s ease forwards; }
+    .apc-slide-up   { animation: slide-up 0.48s cubic-bezier(0.22,1,0.36,1) both; }
+    .apc-bar        { animation: bar-in 1.2s cubic-bezier(0.22,1,0.36,1) both; animation-delay: var(--delay, 0ms); }
+    .apc-flash      { animation: border-flash 0.7s ease 2; }
+    .apc-count-pop  { animation: count-flash 0.55s ease; }
 
-    ::-webkit-scrollbar             { width: 4px; height: 4px; }
-    ::-webkit-scrollbar-track       { background: var(--surface); }
-    ::-webkit-scrollbar-thumb       { background: var(--apc-mid); border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: var(--apc-green); }
-
-    .ticker-track { display: flex; animation: ticker-scroll 35s linear infinite; width: max-content; }
+    .ticker-track { display: flex; animation: ticker-scroll 45s linear infinite; width: max-content; }
     .ticker-track:hover { animation-play-state: paused; }
 
-    /* Scope bar selects */
+    ::-webkit-scrollbar             { width: 3px; height: 3px; }
+    ::-webkit-scrollbar-track       { background: var(--surface); }
+    ::-webkit-scrollbar-thumb       { background: var(--green); border-radius: 2px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--green2); }
+
     .scope-select {
       appearance: none;
       background: var(--surface-2);
@@ -1112,14 +126,14 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLE_ID)) {
       background-position: right 8px center;
       transition: border-color 0.2s;
     }
-    .scope-select:focus { outline: none; border-color: var(--apc-gold); }
+    .scope-select:focus  { outline: none; border-color: var(--gold); }
     .scope-select:disabled { opacity: 0.35; cursor: not-allowed; }
-    .scope-select option { background: #0C1A10; }
+    .scope-select option { background: #0C1A14; }
   `;
   document.head.appendChild(s);
 }
 
-// ─── useWindowSize ───────────────────────────────────────────────────────────
+// ─── useWindowSize ────────────────────────────────────────────────────────────
 function useWindowSize() {
   const [w, setW] = useState(typeof window !== 'undefined' ? window.innerWidth : 1280);
   useEffect(() => {
@@ -1127,82 +141,70 @@ function useWindowSize() {
     window.addEventListener('resize', h, { passive: true });
     return () => window.removeEventListener('resize', h);
   }, []);
-  const bp = w < 480 ? 'xs' : w < 768 ? 'sm' : w < 1024 ? 'md' : 'lg';
-  return { w, bp, mobile: w < 768, tablet: w >= 768 && w < 1024, desktop: w >= 1024 };
+  return { mobile: w < 768, tablet: w >= 768 && w < 1024, desktop: w >= 1024 };
 }
 
-// ─── Party palette ───────────────────────────────────────────────────────────
+// ─── Party colours ────────────────────────────────────────────────────────────
 const PARTY_PALETTE = {
-  APC:  { bar: '#1A6B3A', glow: 'rgba(26,107,58,0.55)',  label: '#4ADE80' },
-  PDP:  { bar: '#1d4ed8', glow: 'rgba(29,78,216,0.45)',  label: '#93C5FD' },
-  LP:   { bar: '#b45309', glow: 'rgba(180,83,9,0.45)',   label: '#FCD34D' },
-  NNPP: { bar: '#7c3aed', glow: 'rgba(124,58,237,0.45)', label: '#C4B5FD' },
+  APC:  { bar: '#006B35', glow: 'rgba(0,107,53,0.5)',   label: '#4ADE80' },
+  PDP:  { bar: '#1D4ED8', glow: 'rgba(29,78,216,0.4)',  label: '#93C5FD' },
+  LP:   { bar: '#B45309', glow: 'rgba(180,83,9,0.4)',   label: '#FCD34D' },
+  NNPP: { bar: '#7C3AED', glow: 'rgba(124,58,237,0.4)', label: '#C4B5FD' },
 };
 const FALLBACKS = [
-  { bar: '#0e7490', glow: 'rgba(14,116,144,0.4)',  label: '#67E8F9' },
-  { bar: '#be185d', glow: 'rgba(190,24,93,0.4)',   label: '#F9A8D4' },
-  { bar: '#4d7c0f', glow: 'rgba(77,124,15,0.4)',   label: '#BEF264' },
-  { bar: '#92400e', glow: 'rgba(146,64,14,0.4)',   label: '#FDE68A' },
+  { bar: '#0E7490', glow: 'rgba(14,116,144,0.4)',  label: '#67E8F9' },
+  { bar: '#BE185D', glow: 'rgba(190,24,93,0.4)',   label: '#F9A8D4' },
 ];
 const partyColor = (party, rank) =>
   PARTY_PALETTE[(party || '').toUpperCase().trim()] || FALLBACKS[rank % FALLBACKS.length];
 
-// ─── APCMark ─────────────────────────────────────────────────────────────────
+// ─── APCMark SVG ──────────────────────────────────────────────────────────────
 function APCMark({ size = 60 }) {
   return (
     <svg width={size} height={size * 1.1} viewBox="0 0 200 220" fill="none"
       xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
-      <rect x="10"  y="10" width="60"  height="160" fill="#009A44"/>
-      <rect x="70"  y="10" width="60"  height="160" fill="#FFFFFF"/>
-      <rect x="130" y="10" width="60"  height="160" fill="#87CEEB"/>
-      <rect x="10"  y="10" width="180" height="160" fill="none" stroke="#ccc" strokeWidth="0.5"/>
+      <rect x="10" y="10" width="60"  height="160" fill="#009A44" />
+      <rect x="70" y="10" width="60"  height="160" fill="#FFFFFF" />
+      <rect x="130" y="10" width="60" height="160" fill="#87CEEB" />
       {[
         [62,20,2.2],[68,18,2],[74,16,1.8],[80,14,1.8],[86,13,2],[91,12,2.2],
-        [96,12,2.4],[100,12,2.8],[104,12,2.4],[109,12,2.2],[114,13,2],[120,14,1.8],
-        [126,16,1.8],[132,18,2],[138,20,2.2],
-      ].map(([x2, y2, sw], i) => (
+        [96,12,2.4],[100,12,2.8],[104,12,2.4],[109,12,2.2],[114,13,2],
+        [120,14,1.8],[126,16,1.8],[132,18,2],[138,20,2.2],
+      ].map(([x2,y2,sw],i) => (
         <line key={i} x1="100" y1="115" x2={x2} y2={y2}
-          stroke={i % 2 === 0 ? '#C8A96E' : '#D4B87A'}
-          strokeWidth={sw} strokeLinecap="round"/>
+          stroke={i%2===0?'#C8A96E':'#D4B87A'} strokeWidth={sw} strokeLinecap="round"/>
       ))}
-      <rect x="91" y="108" width="18" height="8"  rx="3" fill="#8B6914" opacity="0.9"/>
-      <rect x="89" y="114" width="22" height="7"  rx="3" fill="#7A5C10" opacity="0.85"/>
-      <ellipse cx="100" cy="132" rx="13" ry="16" fill="#8B5E3C"/>
-      <ellipse cx="87"  cy="127" rx="6"  ry="4.5" fill="#9B6E4C" transform="rotate(-20,87,127)"/>
-      <ellipse cx="93"  cy="120" rx="4" ry="3" fill="#7A4E2C" opacity="0.5"/>
-      <ellipse cx="100" cy="118" rx="4" ry="3" fill="#7A4E2C" opacity="0.5"/>
-      <ellipse cx="107" cy="120" rx="4" ry="3" fill="#7A4E2C" opacity="0.5"/>
-      <rect x="89" y="144" width="22" height="22" rx="5" fill="#8B5E3C"/>
-      <rect x="87" y="160" width="26" height="8"  rx="3" fill="#6B4224" opacity="0.7"/>
-      <rect x="10" y="170" width="180" height="40" fill="#CC1E1E"/>
+      <ellipse cx="100" cy="132" rx="13" ry="16" fill="#8B5E3C" />
+      <rect x="89" y="144" width="22" height="22" rx="5" fill="#8B5E3C" />
+      <rect x="10" y="170" width="180" height="40" fill="#CC1E1E" />
       <text x="100" y="198" textAnchor="middle"
-        fontFamily="Arial Black, Arial, sans-serif"
-        fontSize="28" fontWeight="900" fill="#FFFFFF" letterSpacing="4">APC</text>
+        fontFamily="Arial Black,Arial,sans-serif" fontSize="28" fontWeight="900"
+        fill="#FFFFFF" letterSpacing="4">APC</text>
     </svg>
   );
 }
 
-// ─── LivePulse ───────────────────────────────────────────────────────────────
+// ─── LivePulse ────────────────────────────────────────────────────────────────
 function LivePulse({ active }) {
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
-      <span style={{ position: 'relative', width: 9, height: 9, flexShrink: 0 }}>
+    <span style={{ display:'inline-flex', alignItems:'center', gap:7 }}>
+      <span style={{ position:'relative', width:9, height:9, flexShrink:0 }}>
         <span style={{
-          display: 'block', width: 9, height: 9, borderRadius: '50%',
+          display:'block', width:9, height:9, borderRadius:'50%',
           background: active ? '#4ADE80' : '#374151',
           boxShadow: active ? '0 0 8px #4ADE8099' : 'none',
         }}/>
         {active && (
           <span style={{
-            position: 'absolute', inset: 0, borderRadius: '50%',
-            border: '1.5px solid #4ADE80',
-            animation: 'pulse-ring 1.7s ease-out infinite',
+            position:'absolute', inset:0, borderRadius:'50%',
+            border:'1.5px solid #4ADE80',
+            animation:'pulse-ring 1.8s ease-out infinite',
           }}/>
         )}
       </span>
       <span style={{
-        fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.14em',
-        textTransform: 'uppercase', fontWeight: 500,
+        fontFamily:'var(--mono)', fontSize:10, letterSpacing:'0.14em',
+        textTransform:'uppercase', fontWeight:500,
         color: active ? '#4ADE80' : '#4B5563',
       }}>
         {active ? 'Live' : 'Offline'}
@@ -1211,59 +213,59 @@ function LivePulse({ active }) {
   );
 }
 
-// ─── SectionHeader ───────────────────────────────────────────────────────────
+// ─── SectionHeader ────────────────────────────────────────────────────────────
 function SectionHeader({ label, right }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:18 }}>
+      <div style={{ display:'flex', alignItems:'center', gap:9 }}>
         <span style={{
-          display: 'block', width: 3, height: 13, borderRadius: 2,
-          background: 'var(--apc-gold)', boxShadow: '0 0 8px rgba(201,168,76,0.45)',
+          display:'block', width:3, height:13, borderRadius:2,
+          background:'var(--gold)', boxShadow:'0 0 8px rgba(201,168,76,0.45)',
         }}/>
         <span style={{
-          fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.18em',
-          textTransform: 'uppercase', color: 'var(--apc-gold)', fontWeight: 500,
+          fontFamily:'var(--mono)', fontSize:10, letterSpacing:'0.18em',
+          textTransform:'uppercase', color:'var(--gold)', fontWeight:500,
         }}>{label}</span>
       </div>
       {right && (
-        <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)' }}>{right}</span>
+        <span style={{ fontFamily:'var(--mono)', fontSize:10, color:'var(--muted)' }}>{right}</span>
       )}
     </div>
   );
 }
 
-// ─── StatBlock ───────────────────────────────────────────────────────────────
+// ─── StatBlock ────────────────────────────────────────────────────────────────
 function StatBlock({ label, value, sub, accent, flash, index = 0 }) {
   const fmt = typeof value === 'number' ? value.toLocaleString() : (value ?? '—');
   return (
     <div
       className={`apc-slide-up${flash ? ' apc-flash' : ''}`}
       style={{
-        animationDelay: `${index * 80}ms`,
+        animationDelay: `${index * 70}ms`,
         padding: '18px 20px 16px',
         background: 'var(--surface)',
         border: '1px solid var(--border)',
-        borderRadius: 8,
+        borderRadius: 10,
         position: 'relative', overflow: 'hidden',
         transition: 'border-color 0.4s, box-shadow 0.4s',
       }}
     >
       <span style={{
-        position: 'absolute', top: 0, left: 0, right: 0, height: .5,
-        background: accent || 'var(--apc-green)', borderRadius: '10px 10px 0 0',
+        position:'absolute', top:0, left:0, right:0, height:2,
+        background: accent || 'var(--green)', borderRadius:'10px 10px 0 0',
       }}/>
       <p style={{
-        fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.16em',
-        textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8,
+        fontFamily:'var(--mono)', fontSize:9, letterSpacing:'0.16em',
+        textTransform:'uppercase', color:'var(--muted)', marginBottom:8,
       }}>{label}</p>
       <p className={flash ? 'apc-count-pop' : ''} style={{
-        fontFamily: 'var(--display)',
-        fontSize: 'clamp(20px, 2.5vw, 32px)',
-        fontWeight: 800, color: 'var(--text)',
-        lineHeight: 1, letterSpacing: '-0.03em',
+        fontFamily:'var(--display)',
+        fontSize: 'clamp(20px, 2.4vw, 30px)',
+        fontWeight:800, color:'var(--text)',
+        lineHeight:1, letterSpacing:'-0.03em',
       }}>{fmt}</p>
       {sub && (
-        <p style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)', marginTop: 6, lineHeight: 1.5 }}>
+        <p style={{ fontFamily:'var(--mono)', fontSize:10, color:'var(--muted)', marginTop:6, lineHeight:1.5 }}>
           {sub}
         </p>
       )}
@@ -1271,65 +273,65 @@ function StatBlock({ label, value, sub, accent, flash, index = 0 }) {
   );
 }
 
-// ─── VoteBar ─────────────────────────────────────────────────────────────────
+// ─── VoteBar ──────────────────────────────────────────────────────────────────
 function VoteBar({ party, votes, total, rank, delay, isLeader }) {
   const pct = total > 0 ? (votes / total) * 100 : 0;
   const { bar, glow, label } = partyColor(party, rank);
   return (
-    <div className="apc-slide-up" style={{ animationDelay: `${delay}ms`, marginBottom: 18 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <div className="apc-slide-up" style={{ animationDelay:`${delay}ms`, marginBottom:18 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           {isLeader && (
             <span style={{
-              fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.1em',
-              background: 'var(--apc-gold)', color: '#060E09',
-              padding: '2px 7px', borderRadius: 3, fontWeight: 600,
-              textTransform: 'uppercase',
+              fontFamily:'var(--mono)', fontSize:9, letterSpacing:'0.1em',
+              background:'var(--gold)', color:'#04080A',
+              padding:'2px 7px', borderRadius:3, fontWeight:600,
+              textTransform:'uppercase',
             }}>Leading</span>
           )}
-          <span style={{ fontFamily: 'var(--display)', fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+          <span style={{ fontFamily:'var(--display)', fontSize:13, fontWeight:700, color:'var(--text)' }}>
             {party}
           </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 500, color: label }}>
+        <div style={{ display:'flex', alignItems:'baseline', gap:8 }}>
+          <span style={{ fontFamily:'var(--mono)', fontSize:14, fontWeight:500, color:label }}>
             {votes.toLocaleString()}
           </span>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)' }}>
+          <span style={{ fontFamily:'var(--mono)', fontSize:10, color:'var(--muted)' }}>
             {pct.toFixed(1)}%
           </span>
         </div>
       </div>
-      <div style={{ height: 5, background: 'rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden' }}>
+      <div style={{ height:5, background:'rgba(255,255,255,0.06)', borderRadius:3, overflow:'hidden' }}>
         <div className="apc-bar" style={{
-          '--w': `${pct}%`, '--delay': `${delay + 200}ms`,
-          width: `${pct}%`, height: '100%', background: bar,
-          borderRadius: 3, boxShadow: `0 0 10px ${glow}`,
+          '--w':`${pct}%`, '--delay':`${delay+200}ms`,
+          width:`${pct}%`, height:'100%', background:bar,
+          borderRadius:3, boxShadow:`0 0 10px ${glow}`,
         }}/>
       </div>
     </div>
   );
 }
 
-// ─── Ticker ──────────────────────────────────────────────────────────────────
+// ─── Ticker ───────────────────────────────────────────────────────────────────
 function Ticker({ parties, grandTotal }) {
   if (!parties.length) return null;
   const items = [...parties, ...parties];
   return (
-    <div style={{ overflow: 'hidden', background: 'var(--apc-dark)', borderBottom: '1px solid var(--border)' }}>
-      <div className="ticker-track" style={{ padding: '6px 0' }}>
+    <div style={{ overflow:'hidden', background:'var(--surface-3)', borderBottom:'1px solid var(--border)' }}>
+      <div className="ticker-track" style={{ padding:'6px 0' }}>
         {items.map((p, i) => {
-          const pct = grandTotal > 0 ? ((p.totalVotes / grandTotal) * 100).toFixed(1) : '0.0';
+          const pct = grandTotal > 0 ? ((p.totalVotes / grandTotal)*100).toFixed(1) : '0.0';
           const { label } = partyColor(p.party, i % parties.length);
           return (
             <span key={i} style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '0 20px', borderRight: '1px solid var(--border)',
-              fontFamily: 'var(--mono)', fontSize: 10, whiteSpace: 'nowrap',
+              display:'inline-flex', alignItems:'center', gap:6,
+              padding:'0 20px', borderRight:'1px solid var(--border)',
+              fontFamily:'var(--mono)', fontSize:10, whiteSpace:'nowrap',
             }}>
-              <span style={{ fontWeight: 600, color: label }}>{p.party}</span>
-              <span style={{ color: 'var(--text)' }}>{p.totalVotes.toLocaleString()}</span>
-              <span style={{ color: 'var(--muted)' }}>({pct}%)</span>
+              <span style={{ fontWeight:600, color:label }}>{p.party}</span>
+              <span style={{ color:'var(--text)' }}>{p.totalVotes.toLocaleString()}</span>
+              <span style={{ color:'var(--muted)' }}>({pct}%)</span>
             </span>
           );
         })}
@@ -1338,27 +340,27 @@ function Ticker({ parties, grandTotal }) {
   );
 }
 
-// ─── Skeleton ────────────────────────────────────────────────────────────────
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
 function Skeleton({ h = 120, delay = 0 }) {
   return (
     <div style={{
-      height: h, borderRadius: 12,
-      background: 'linear-gradient(90deg, var(--surface) 25%, var(--surface-2) 50%, var(--surface) 75%)',
-      backgroundSize: '200% 100%',
-      animation: 'shimmer 1.9s ease infinite',
-      animationDelay: `${delay}ms`,
+      height:h, borderRadius:12,
+      background:'linear-gradient(90deg,var(--surface) 25%,var(--surface-2) 50%,var(--surface) 75%)',
+      backgroundSize:'200% 100%',
+      animation:'shimmer 1.9s ease infinite',
+      animationDelay:`${delay}ms`,
     }}/>
   );
 }
 
-// ─── Panel ───────────────────────────────────────────────────────────────────
+// ─── Panel ────────────────────────────────────────────────────────────────────
 function Panel({ children, style }) {
   return (
     <div style={{
-      background: 'var(--surface)',
-      border: '1px solid var(--border)',
-      borderRadius: 14,
-      padding: '20px',
+      background:'var(--surface)',
+      border:'1px solid var(--border)',
+      borderRadius:14,
+      padding:'20px',
       ...style,
     }}>
       {children}
@@ -1366,72 +368,53 @@ function Panel({ children, style }) {
   );
 }
 
-// ─── ScopeBar — LCDA → Ward cascading filter ─────────────────────────────────
-// Props:
-//   lcdas     : [{ _id, name }]
-//   wards     : [{ _id, name }]  (filtered to selected LCDA)
-//   scope     : 'all' | 'lcda' | 'ward'
-//   lcdaId    : string
-//   wardId    : string
-//   onChange  : ({ scope, lcdaId, wardId }) => void
-//   onLcdaChange : (lcdaId) => void  — triggers ward fetch in parent
+// ─── ScopeBar (LCDA → Ward cascading filter) ─────────────────────────────────
 function ScopeBar({ lcdas, wards, scope, lcdaId, wardId, onChange, onLcdaChange, mobile }) {
   return (
     <div style={{
-      display: 'flex',
-      flexWrap: 'wrap',
-      alignItems: 'center',
+      display:'flex', flexWrap:'wrap', alignItems:'center',
       gap: mobile ? 8 : 12,
       padding: mobile ? '10px 16px' : '10px 24px',
-      background: 'var(--surface-2)',
-      borderBottom: '1px solid var(--border)',
+      background:'var(--surface-2)',
+      borderBottom:'1px solid var(--border)',
     }}>
-      {/* Label */}
-      <span style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.16em',
-        textTransform: 'uppercase', color: 'var(--muted)', flexShrink: 0 }}>
+      <span style={{ fontFamily:'var(--mono)', fontSize:10, letterSpacing:'0.16em',
+        textTransform:'uppercase', color:'var(--muted)', flexShrink:0 }}>
         Filter
       </span>
 
-      {/* All Lagos */}
       <button
-        onClick={() => onChange({ scope: 'all', lcdaId: '', wardId: '' })}
+        onClick={() => onChange({ scope:'all', lcdaId:'', wardId:'' })}
         style={{
-          fontFamily: 'var(--mono)', fontSize: 11,
-          padding: '5px 12px', borderRadius: 6, cursor: 'pointer',
-          border: `1px solid ${scope === 'all' ? 'var(--apc-gold)' : 'var(--border)'}`,
-          background: scope === 'all' ? 'rgba(201,168,76,0.12)' : 'transparent',
-          color: scope === 'all' ? 'var(--apc-gold)' : 'var(--muted)',
-          transition: 'all 0.2s',
+          fontFamily:'var(--mono)', fontSize:11,
+          padding:'5px 12px', borderRadius:6, cursor:'pointer',
+          border:`1px solid ${scope==='all'?'var(--gold)':'var(--border)'}`,
+          background: scope==='all' ? 'rgba(201,168,76,0.12)' : 'transparent',
+          color: scope==='all' ? 'var(--gold)' : 'var(--muted)',
+          transition:'all 0.2s',
         }}
-      >
-        All Lagos
-      </button>
+      >All Lagos</button>
 
-      {/* LCDA select */}
       <select
         className="scope-select"
         value={lcdaId}
         onChange={(e) => {
           const id = e.target.value;
           onLcdaChange(id);
-          onChange({ scope: id ? 'lcda' : 'all', lcdaId: id, wardId: '' });
+          onChange({ scope: id ? 'lcda' : 'all', lcdaId: id, wardId:'' });
         }}
       >
         <option value="">— Select LCDA —</option>
-        {lcdas.map((l) => (
-          <option key={l._id} value={l._id}>{l.name}</option>
-        ))}
+        {lcdas.map(l => <option key={l._id} value={l._id}>{l.name}</option>)}
       </select>
 
-      {/* Chevron separator */}
       {lcdaId && (
         <svg width="10" height="10" fill="none" viewBox="0 0 24 24"
-          stroke="rgba(184,223,200,0.3)" strokeWidth={2.5}>
+          stroke="rgba(180,220,200,0.3)" strokeWidth={2.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
         </svg>
       )}
 
-      {/* Ward select — only when an LCDA is chosen */}
       {lcdaId && (
         <select
           className="scope-select"
@@ -1442,211 +425,200 @@ function ScopeBar({ lcdas, wards, scope, lcdaId, wardId, onChange, onLcdaChange,
           }}
         >
           <option value="">— All wards —</option>
-          {wards.map((w) => (
-            <option key={w._id} value={w._id}>{w.name}</option>
-          ))}
+          {wards.map(w => <option key={w._id} value={w._id}>{w.name}</option>)}
         </select>
       )}
 
-      {/* Active scope badge */}
       {scope !== 'all' && (
         <span style={{
-          marginLeft: 'auto',
-          fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.12em',
-          textTransform: 'uppercase', padding: '3px 8px', borderRadius: 4,
-          background: scope === 'ward'
-            ? 'rgba(26,107,58,0.25)'
-            : 'rgba(201,168,76,0.15)',
-          color: scope === 'ward' ? '#4ADE80' : 'var(--apc-gold)',
-          border: `1px solid ${scope === 'ward' ? 'rgba(26,107,58,0.5)' : 'rgba(201,168,76,0.35)'}`,
+          marginLeft:'auto',
+          fontFamily:'var(--mono)', fontSize:9, letterSpacing:'0.12em',
+          textTransform:'uppercase', padding:'3px 8px', borderRadius:4,
+          background: scope==='ward' ? 'rgba(0,107,53,0.25)' : 'rgba(201,168,76,0.15)',
+          color:       scope==='ward' ? '#4ADE80'             : 'var(--gold)',
+          border:`1px solid ${scope==='ward' ? 'rgba(0,107,53,0.5)' : 'rgba(201,168,76,0.35)'}`,
         }}>
-          {scope === 'ward' ? 'Ward view' : 'LCDA view'}
+          {scope==='ward' ? 'Ward view' : 'LCDA view'}
         </span>
       )}
     </div>
   );
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
 //  DASHBOARD
-// ═════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
 export default function Dashboard() {
   const { mobile, desktop } = useWindowSize();
-  const backendUrl = import.meta.env.VITE_API_URL
+  const backendUrl = import.meta.env.VITE_API_URL;
 
-  // ── Scope state ────────────────────────────────────────────────────────────
-  const [scope,  setScope]  = useState('all');   // 'all' | 'lcda' | 'ward'
+  // ── Scope ──────────────────────────────────────────────────────────────────
+  const [scope,  setScope]  = useState('all');
   const [lcdaId, setLcdaId] = useState('');
   const [wardId, setWardId] = useState('');
 
-  // ── LCDA + Ward lists for ScopeBar ─────────────────────────────────────────
+  // ── LCDA + Ward lists ──────────────────────────────────────────────────────
   const [lcdas, setLcdas] = useState([]);
   const [wards, setWards] = useState([]);
 
-  // Fetch all LCDAs once on mount
   useEffect(() => {
     fetch(`${backendUrl}/results/lcdas`)
-      .then((r) => r.json())
-      .then((d) => setLcdas(d.lcdas || d))
+      .then(r => r.json())
+      .then(d => setLcdas(d.lcdas ?? d))
       .catch(console.error);
-  }, []);
+  }, [backendUrl]);
 
-  // Fetch wards whenever LCDA changes
   useEffect(() => {
     if (!lcdaId) { setWards([]); return; }
     fetch(`${backendUrl}/results/lcdas/${lcdaId}/wards`)
-      .then((r) => r.json())
-      .then((d) => setWards(d.wards || d))
+      .then(r => r.json())
+      .then(d => setWards(d.wards ?? d))
       .catch(console.error);
-  }, [lcdaId]);
+  }, [lcdaId, backendUrl]);
 
-  // ── Refresh / socket ───────────────────────────────────────────────────────
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [newestId,   setNewestId]   = useState(null);
-  const [flashStats, setFlashStats] = useState(false);
-  const [lastUpdate, setLastUpdate] = useState(null);
-  const [eventLog,   setEventLog]   = useState([]);
-  const [clock,      setClock]      = useState(new Date());
+  // ── Real-time ──────────────────────────────────────────────────────────────
+  const [refreshKey,   setRefreshKey]   = useState(0);
+  const [newestWardId, setNewestWardId] = useState(null);   // for LGATable highlight
+  const [flashStats,   setFlashStats]   = useState(false);
+  const [lastUpdate,   setLastUpdate]   = useState(null);
+  const [eventLog,     setEventLog]     = useState([]);
+  const [clock,        setClock]        = useState(new Date());
   const flashTimer = useRef(null);
 
   const { connected, newResult, updatedResult } = useSocket();
 
-  // Pass scope params into useSummary — your hook needs to forward these as
-  // query params: ?scope=lcda&id=<lcdaId> or ?scope=ward&id=<wardId>
-  const scopeParams = scope === 'all'
-    ? {}
-    : scope === 'lcda'
-      ? { scope: 'lcda', id: lcdaId }
-      : { scope: 'ward', id: wardId };
+  const scopeParams = scope === 'all' ? {}
+    : scope === 'lcda' ? { scope:'lcda', id:lcdaId }
+    : { scope:'ward', id:wardId };
 
   const { summary, results, loading, error } = useSummary(refreshKey, scopeParams);
 
+  // Clock tick
   useEffect(() => {
     const t = setInterval(() => setClock(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
 
+  // New result from socket
   useEffect(() => {
     if (!newResult) return;
-    // If a scope filter is active, only refresh if the new result matches
     const r = newResult.result;
     if (scope === 'lcda' && String(r?.lcda) !== lcdaId) return;
-    if (scope === 'ward'  && String(r?.ward)  !== wardId)  return;
+    if (scope === 'ward'  && String(r?.ward) !== wardId)  return;
 
-    setRefreshKey((k) => k + 1);
-    setNewestId(r?._id || null);
+    const wardMongoId = String(r?.ward?._id ?? r?.ward ?? '');
+    setNewestWardId(wardMongoId);
+    setRefreshKey(k => k + 1);
     setLastUpdate(new Date());
     setFlashStats(true);
-    setEventLog((log) => [r, ...log].slice(0, 25));
+    setEventLog(log => [r, ...log].slice(0, 25));
     clearTimeout(flashTimer.current);
-    flashTimer.current = setTimeout(() => setFlashStats(false), 2500);
-  }, [newResult]);
+    flashTimer.current = setTimeout(() => {
+      setFlashStats(false);
+      setNewestWardId(null);
+    }, 4000);
+  }, [newResult]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (updatedResult) setRefreshKey((k) => k + 1);
+    if (updatedResult) setRefreshKey(k => k + 1);
   }, [updatedResult]);
 
-  // Reset ward when LCDA changes via ScopeBar
   const handleScopeChange = useCallback(({ scope: s, lcdaId: l, wardId: w }) => {
-    setScope(s);
-    setLcdaId(l);
-    setWardId(w);
-    setRefreshKey((k) => k + 1);
+    setScope(s); setLcdaId(l); setWardId(w);
+    setRefreshKey(k => k + 1);
     setEventLog([]);
   }, []);
 
   useEffect(() => () => clearTimeout(flashTimer.current), []);
 
-  // ── Derived summary values ─────────────────────────────────────────────────
-  const parties         = summary?.parties        || [];
-  const grandTotal      = summary?.grandTotal     || 0;
-  const reportingWards  = summary?.reportingUnits || 0; // reuse same field name from API
-  const leader          = parties[0];
-  const apcData         = parties.find((p) => (p.party || '').toUpperCase() === 'APC');
-  const apcPct          = grandTotal > 0 && apcData
+  // ── Derived ────────────────────────────────────────────────────────────────
+  const parties        = summary?.parties        ?? [];
+  const grandTotal     = summary?.grandTotal     ?? 0;
+  const reportingWards = summary?.reportingUnits ?? 0;
+  const leader         = parties[0];
+  const apcData        = parties.find(p => (p.party ?? '').toUpperCase() === 'APC');
+  const apcPct         = grandTotal > 0 && apcData
     ? ((apcData.totalVotes / grandTotal) * 100).toFixed(1) : null;
+  const apcMargin = (() => {
+    if (!apcData || parties.length < 2) return null;
+    const second = parties.find(p => (p.party ?? '').toUpperCase() !== 'APC');
+    return second ? apcData.totalVotes - second.totalVotes : null;
+  })();
 
-  // Responsive spacing
   const px       = mobile ? 16 : 24;
   const gap      = mobile ? 10 : 14;
   const panelPad = mobile ? '16px' : '22px 24px';
 
-  // ── Scope label for hero ───────────────────────────────────────────────────
   const scopeLabel = scope === 'all'
     ? 'Lagos State'
-    : scope === 'lcda'
-      ? (lcdas.find((l) => l._id === lcdaId)?.name || 'LCDA')
-      : (wards.find((w) => w._id === wardId)?.name  || 'Ward');
+    : scope === 'lcda' ? (lcdas.find(l => l._id === lcdaId)?.name ?? 'LCDA')
+    : (wards.find(w => w._id === wardId)?.name ?? 'Ward');
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div style={{
-      minHeight: '100vh',
-      background: 'var(--bg)',
-      color: 'var(--text)',
-      fontFamily: 'var(--mono)',
-      overflowX: 'hidden',
+      minHeight:'100vh', background:'var(--bg)',
+      color:'var(--text)', fontFamily:'var(--mono)', overflowX:'hidden',
     }}>
 
-      {/* ══ HEADER ═══════════════════════════════════════════════════ */}
+      {/* ══ HEADER ══════════════════════════════════════════════════ */}
       <header style={{
-        position: 'sticky', top: 0, zIndex: 100,
-        background: 'rgba(6,14,9,0.96)',
-        borderBottom: '1px solid var(--border-2)',
-        backdropFilter: 'blur(16px)',
+        position:'sticky', top:0, zIndex:100,
+        background:'rgba(4,8,10,0.96)',
+        borderBottom:'1px solid var(--border-2)',
+        backdropFilter:'blur(18px)',
       }}>
         {mobile ? (
-          <div style={{ padding: '0 16px' }}>
-            <div style={{ height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ padding:'0 16px' }}>
+            <div style={{ height:52, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                 <APCMark size={26}/>
                 <div>
-                  <p style={{ fontFamily: 'var(--display)', fontWeight: 800, fontSize: 14,
-                    color: 'var(--text)', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
-                    APC Results Centre
+                  <p style={{ fontFamily:'var(--display)', fontWeight:800, fontSize:14,
+                    color:'var(--text)', letterSpacing:'-0.02em', lineHeight:1.1 }}>
+                    APC Command Centre
                   </p>
-                  <p style={{ fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--muted)',
-                    letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: 1 }}>
-                    All Progressives Congress
+                  <p style={{ fontFamily:'var(--mono)', fontSize:8, color:'var(--muted)',
+                    letterSpacing:'0.12em', textTransform:'uppercase', marginTop:1 }}>
+                    Lagos 2025 LGA Elections
                   </p>
                 </div>
               </div>
               <LivePulse active={connected}/>
             </div>
             {apcData && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                paddingBottom: 10, gap: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 14px',
-                  background: 'rgba(26,107,58,0.1)', border: '1px solid rgba(26,107,58,0.28)',
-                  borderRadius: 8, flex: 1 }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+                paddingBottom:10, gap:10 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:12, padding:'6px 14px',
+                  background:'rgba(0,107,53,0.1)', border:'1px solid rgba(0,107,53,0.28)',
+                  borderRadius:8, flex:1 }}>
                   <div>
-                    <p style={{ fontFamily: 'var(--display)', fontSize: 17, fontWeight: 800,
-                      color: '#4ADE80', letterSpacing: '-0.03em', lineHeight: 1 }}>
+                    <p style={{ fontFamily:'var(--display)', fontSize:17, fontWeight:800,
+                      color:'#4ADE80', letterSpacing:'-0.03em', lineHeight:1 }}>
                       {apcData.totalVotes.toLocaleString()}
                     </p>
-                    <p style={{ fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--muted)', marginTop: 1 }}>
+                    <p style={{ fontFamily:'var(--mono)', fontSize:8, color:'var(--muted)', marginTop:1 }}>
                       APC VOTES
                     </p>
                   </div>
-                  {apcPct && (
-                    <>
-                      <span style={{ width: 1, height: 24, background: 'var(--border-2)' }}/>
-                      <div>
-                        <p style={{ fontFamily: 'var(--display)', fontSize: 17, fontWeight: 800,
-                          color: 'var(--apc-gold)', letterSpacing: '-0.03em', lineHeight: 1 }}>
-                          {apcPct}%
-                        </p>
-                        <p style={{ fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--muted)', marginTop: 1 }}>
-                          SHARE
-                        </p>
-                      </div>
-                    </>
-                  )}
+                  {apcPct && <>
+                    <span style={{ width:1, height:24, background:'var(--border-2)' }}/>
+                    <div>
+                      <p style={{ fontFamily:'var(--display)', fontSize:17, fontWeight:800,
+                        color:'var(--gold)', letterSpacing:'-0.03em', lineHeight:1 }}>
+                        {apcPct}%
+                      </p>
+                      <p style={{ fontFamily:'var(--mono)', fontSize:8, color:'var(--muted)', marginTop:1 }}>
+                        SHARE
+                      </p>
+                    </div>
+                  </>}
                 </div>
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <p style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
+                <div style={{ textAlign:'right', flexShrink:0 }}>
+                  <p style={{ fontFamily:'var(--mono)', fontSize:13, fontWeight:500, color:'var(--text)' }}>
                     {format(clock, 'HH:mm:ss')}
                   </p>
-                  <p style={{ fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--muted)', marginTop: 1 }}>
+                  <p style={{ fontFamily:'var(--mono)', fontSize:8, color:'var(--muted)', marginTop:1 }}>
                     {format(clock, 'dd MMM yyyy')}
                   </p>
                 </div>
@@ -1654,144 +626,142 @@ export default function Dashboard() {
             )}
           </div>
         ) : (
-          <div style={{ maxWidth: 1600, margin: '0 auto', padding: `0 ${px}px`,
-            height: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+          <div style={{ maxWidth:1700, margin:'0 auto', padding:`0 ${px}px`,
+            height:60, display:'flex', alignItems:'center', justifyContent:'space-between', gap:16 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
               <APCMark size={32}/>
               <div>
-                <p style={{ fontFamily: 'var(--display)', fontWeight: 800, fontSize: 16,
-                  color: 'var(--text)', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
-                  APC Results Centre
+                <p style={{ fontFamily:'var(--display)', fontWeight:800, fontSize:16,
+                  color:'var(--text)', letterSpacing:'-0.02em', lineHeight:1.1 }}>
+                  APC Command Centre
                 </p>
-                <p style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--muted)',
-                  letterSpacing: '0.14em', textTransform: 'uppercase', marginTop: 1 }}>
-                  All Progressives Congress
+                <p style={{ fontFamily:'var(--mono)', fontSize:9, color:'var(--muted)',
+                  letterSpacing:'0.14em', textTransform:'uppercase', marginTop:1 }}>
+                  Lagos 2025 LGA Chairmanship Elections
                 </p>
               </div>
             </div>
+
+            {/* APC pill */}
             {apcData && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0,
-                padding: '8px 20px', background: 'rgba(26,107,58,0.1)',
-                border: '1px solid rgba(26,107,58,0.28)', borderRadius: 10 }}>
-                <div style={{ textAlign: 'center' }}>
-                  <p style={{ fontFamily: 'var(--display)', fontSize: 21, fontWeight: 800,
-                    color: '#4ADE80', letterSpacing: '-0.03em', lineHeight: 1 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:16, flexShrink:0,
+                padding:'8px 20px', background:'rgba(0,107,53,0.1)',
+                border:'1px solid rgba(0,107,53,0.28)', borderRadius:10 }}>
+                <div style={{ textAlign:'center' }}>
+                  <p style={{ fontFamily:'var(--display)', fontSize:22, fontWeight:800,
+                    color:'#4ADE80', letterSpacing:'-0.03em', lineHeight:1 }}>
                     {apcData.totalVotes.toLocaleString()}
                   </p>
-                  <p style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--muted)', marginTop: 2 }}>
-                    APC VOTES
-                  </p>
+                  <p style={{ fontFamily:'var(--mono)', fontSize:9, color:'var(--muted)', marginTop:2 }}>APC VOTES</p>
                 </div>
-                {apcPct && (
-                  <>
-                    <span style={{ width: 1, height: 28, background: 'var(--border-2)', flexShrink: 0 }}/>
-                    <div style={{ textAlign: 'center' }}>
-                      <p style={{ fontFamily: 'var(--display)', fontSize: 21, fontWeight: 800,
-                        color: 'var(--apc-gold)', letterSpacing: '-0.03em', lineHeight: 1 }}>
-                        {apcPct}%
-                      </p>
-                      <p style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--muted)', marginTop: 2 }}>
-                        VOTE SHARE
-                      </p>
-                    </div>
-                  </>
-                )}
+                {apcPct && <>
+                  <span style={{ width:1, height:28, background:'var(--border-2)', flexShrink:0 }}/>
+                  <div style={{ textAlign:'center' }}>
+                    <p style={{ fontFamily:'var(--display)', fontSize:22, fontWeight:800,
+                      color:'var(--gold)', letterSpacing:'-0.03em', lineHeight:1 }}>
+                      {apcPct}%
+                    </p>
+                    <p style={{ fontFamily:'var(--mono)', fontSize:9, color:'var(--muted)', marginTop:2 }}>VOTE SHARE</p>
+                  </div>
+                </>}
+                {apcMargin != null && <>
+                  <span style={{ width:1, height:28, background:'var(--border-2)', flexShrink:0 }}/>
+                  <div style={{ textAlign:'center' }}>
+                    <p style={{ fontFamily:'var(--display)', fontSize:16, fontWeight:800,
+                      color:'#86EFAC', letterSpacing:'-0.02em', lineHeight:1 }}>
+                      +{apcMargin.toLocaleString()}
+                    </p>
+                    <p style={{ fontFamily:'var(--mono)', fontSize:9, color:'var(--muted)', marginTop:2 }}>MARGIN</p>
+                  </div>
+                </>}
               </div>
             )}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
-              <div style={{ textAlign: 'right' }}>
-                <p style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 500,
-                  color: 'var(--text)', letterSpacing: '-0.01em' }}>
+
+            <div style={{ display:'flex', alignItems:'center', gap:18, flexShrink:0 }}>
+              <div style={{ textAlign:'right' }}>
+                <p style={{ fontFamily:'var(--mono)', fontSize:15, fontWeight:500,
+                  color:'var(--text)', letterSpacing:'-0.01em' }}>
                   {format(clock, 'HH:mm:ss')}
                 </p>
-                <p style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--muted)', marginTop: 1 }}>
+                <p style={{ fontFamily:'var(--mono)', fontSize:9, color:'var(--muted)', marginTop:1 }}>
                   {format(clock, 'dd MMM yyyy')}
                 </p>
               </div>
-              <span style={{ width: 1, height: 28, background: 'var(--border)' }}/>
+              <span style={{ width:1, height:28, background:'var(--border)' }}/>
               <LivePulse active={connected}/>
             </div>
           </div>
         )}
       </header>
 
-      {/* ══ TICKER ════════════════════════════════════════════════════ */}
+      {/* ══ TICKER ══════════════════════════════════════════════════ */}
       <Ticker parties={parties} grandTotal={grandTotal}/>
 
-      {/* ══ SCOPE BAR ════════════════════════════════════════════════ */}
+      {/* ══ SCOPE BAR ═══════════════════════════════════════════════ */}
       <ScopeBar
-        lcdas={lcdas}
-        wards={wards}
-        scope={scope}
-        lcdaId={lcdaId}
-        wardId={wardId}
+        lcdas={lcdas} wards={wards}
+        scope={scope} lcdaId={lcdaId} wardId={wardId}
         onChange={handleScopeChange}
         onLcdaChange={(id) => { setLcdaId(id); setWards([]); }}
         mobile={mobile}
       />
 
-      {/* ══ HERO BAND ════════════════════════════════════════════════ */}
+      {/* ══ HERO BAND ═══════════════════════════════════════════════ */}
       <div style={{
-        background: 'linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%)',
-        borderBottom: '1px solid var(--border)',
+        background:'linear-gradient(180deg,var(--surface) 0%,var(--bg) 100%)',
+        borderBottom:'1px solid var(--border)',
         padding: mobile ? '24px 16px 20px' : '36px 24px 32px',
-        position: 'relative', overflow: 'hidden',
+        position:'relative', overflow:'hidden',
       }}>
         {!mobile && (
           <div style={{
-            position: 'absolute', right: -20, top: '50%',
-            transform: 'translateY(-50%)',
-            opacity: 0.07, pointerEvents: 'none', userSelect: 'none', zIndex: 0,
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-          }}>
-            <span style={{
-              fontFamily: 'var(--display)', fontWeight: 800,
-              fontSize: 'clamp(80px, 10vw, 140px)',
-              lineHeight: 1, color: '#ffffff', letterSpacing: '-0.04em',
-            }}>APC</span>
-          </div>
+            position:'absolute', right:-20, top:'50%', transform:'translateY(-50%)',
+            opacity:0.05, pointerEvents:'none', userSelect:'none',
+            fontFamily:'var(--display)', fontWeight:800,
+            fontSize:'clamp(90px,12vw,160px)', lineHeight:1,
+            color:'#ffffff', letterSpacing:'-0.04em',
+          }}>APC</div>
         )}
 
-        <div style={{ maxWidth: 1600, margin: '0 auto', position: 'relative' }}>
-          {/* Scope breadcrumb */}
+        <div style={{ maxWidth:1700, margin:'0 auto', position:'relative' }}>
           <p style={{
-            fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.22em',
-            textTransform: 'uppercase', color: 'var(--apc-gold)',
-            marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8,
+            fontFamily:'var(--mono)', fontSize:10, letterSpacing:'0.22em',
+            textTransform:'uppercase', color:'var(--gold)',
+            marginBottom:10, display:'flex', alignItems:'center', gap:8,
           }}>
-            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 1, background: 'var(--apc-gold)' }}/>
-            General Election · {scopeLabel}
+            <span style={{ display:'inline-block', width:6, height:6, borderRadius:1, background:'var(--gold)' }}/>
+            LGA Chairmanship Election 2025 · {scopeLabel}
           </p>
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end',
-            justifyContent: 'space-between', gap: 20 }}>
-            <div style={{ minWidth: 0 }}>
+          <div style={{ display:'flex', flexWrap:'wrap', alignItems:'flex-end',
+            justifyContent:'space-between', gap:20 }}>
+            <div style={{ minWidth:0 }}>
               <h1 style={{
-                fontFamily: 'var(--display)',
-                fontSize: mobile ? 'clamp(26px, 7vw, 36px)' : 'clamp(28px, 4vw, 52px)',
-                fontWeight: 800, lineHeight: 1.02,
-                letterSpacing: '-0.04em', color: 'var(--text)',
+                fontFamily:'var(--display)',
+                fontSize: mobile ? 'clamp(24px,7vw,34px)' : 'clamp(28px,3.5vw,50px)',
+                fontWeight:800, lineHeight:1.02,
+                letterSpacing:'-0.04em', color:'var(--text)',
               }}>
                 Live Election{mobile ? ' ' : <br/>}
-                <span style={{ color: 'var(--apc-gold)', textShadow: '0 0 40px rgba(201,168,76,0.22)' }}>
+                <span style={{ color:'var(--gold)', textShadow:'0 0 40px rgba(201,168,76,0.2)' }}>
                   Results Dashboard
                 </span>
               </h1>
               {leader && (
-                <p style={{ marginTop: 12, fontFamily: 'var(--mono)',
-                  fontSize: mobile ? 11 : 12, color: 'var(--muted)', lineHeight: 1.8 }}>
-                  Current leader —{' '}
-                  <span style={{ color: partyColor(leader.party, 0).label, fontWeight: 500 }}>
+                <p style={{ marginTop:12, fontFamily:'var(--mono)',
+                  fontSize: mobile ? 11 : 12, color:'var(--muted)', lineHeight:1.8 }}>
+                  Leading —{' '}
+                  <span style={{ color:partyColor(leader.party,0).label, fontWeight:500 }}>
                     {leader.party}
                   </span>
                   {' · '}
-                  <span style={{ color: 'var(--text)' }}>{leader.totalVotes.toLocaleString()} votes</span>
+                  <span style={{ color:'var(--text)' }}>{leader.totalVotes.toLocaleString()} votes</span>
                   {grandTotal > 0 && (
-                    <span> ({((leader.totalVotes / grandTotal) * 100).toFixed(1)}%)</span>
+                    <span> ({((leader.totalVotes/grandTotal)*100).toFixed(1)}%)</span>
                   )}
                   {lastUpdate && !mobile && (
-                    <span style={{ marginLeft: 14 }}>
-                      · Updated {formatDistanceToNow(lastUpdate, { addSuffix: true })}
+                    <span style={{ marginLeft:14, color:'rgba(180,220,200,0.3)' }}>
+                      · Updated {formatDistanceToNow(lastUpdate, { addSuffix:true })}
                     </span>
                   )}
                 </p>
@@ -1801,33 +771,30 @@ export default function Dashboard() {
             {/* Party pills */}
             {parties.length > 0 && (
               <div style={{
-                display: 'flex', gap: 8,
+                display:'flex', gap:8,
                 flexWrap: mobile ? 'nowrap' : 'wrap',
                 overflowX: mobile ? 'auto' : 'visible',
                 paddingBottom: mobile ? 4 : 0,
                 width: mobile ? '100%' : 'auto',
-                scrollbarWidth: 'none',
+                scrollbarWidth:'none',
               }}>
                 {parties.slice(0, mobile ? 4 : 5).map((p, i) => {
-                  const { bar, label } = partyColor(p.party, i);
-                  const isAPC = (p.party || '').toUpperCase() === 'APC';
+                  const { label } = partyColor(p.party, i);
+                  const isAPC = (p.party ?? '').toUpperCase() === 'APC';
                   return (
                     <div key={p.party} style={{
                       padding: mobile ? '10px 14px' : '14px 20px',
-                      textAlign: 'center',
-                      minWidth: mobile ? 72 : 88,
-                      flexShrink: 0,
-                      background: isAPC ? 'rgba(26,107,58,0.18)' : 'var(--surface)',
-                      border: `1px solid ${isAPC ? 'rgba(26,107,58,0.55)' : 'var(--border)'}`,
-                      borderRadius: 10,
+                      textAlign:'center', minWidth: mobile ? 72 : 90, flexShrink:0,
+                      background: isAPC ? 'rgba(0,107,53,0.18)' : 'var(--surface)',
+                      border:`1px solid ${isAPC ? 'rgba(0,107,53,0.55)' : 'var(--border)'}`,
+                      borderRadius:10,
                     }}>
-                      <p style={{ fontFamily: 'var(--display)', fontSize: mobile ? 15 : 19,
-                        fontWeight: 800, color: label, letterSpacing: '-0.03em', lineHeight: 1 }}>
+                      <p style={{ fontFamily:'var(--display)', fontSize: mobile ? 15 : 19,
+                        fontWeight:800, color:label, letterSpacing:'-0.03em', lineHeight:1 }}>
                         {p.totalVotes.toLocaleString()}
                       </p>
-                      <p style={{ fontFamily: 'var(--mono)', fontSize: mobile ? 9 : 10,
-                        marginTop: 4, letterSpacing: '0.1em',
-                        color: isAPC ? 'var(--apc-light)' : 'var(--muted)',
+                      <p style={{ fontFamily:'var(--mono)', fontSize: mobile ? 9 : 10,
+                        marginTop:4, letterSpacing:'0.1em', color:'var(--muted)',
                         fontWeight: isAPC ? 500 : 400 }}>
                         {p.party}
                       </p>
@@ -1840,114 +807,139 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ══ MAIN CONTENT ═════════════════════════════════════════════ */}
-      <main style={{ maxWidth: 1600, margin: '0 auto',
+      {/* ══ MAIN CONTENT ════════════════════════════════════════════ */}
+      <main style={{ maxWidth:1700, margin:'0 auto',
         padding: mobile ? `20px ${px}px 60px` : `28px ${px}px 80px` }}>
 
-        {/* Error */}
+        {/* Error banner */}
         {error && (
-          <div style={{ marginBottom: 16, padding: '10px 14px',
-            background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)',
-            borderRadius: 10, fontSize: 12, color: '#FCA5A5',
-            display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ marginBottom:16, padding:'10px 14px',
+            background:'rgba(220,38,38,0.08)', border:'1px solid rgba(220,38,38,0.2)',
+            borderRadius:10, fontSize:12, color:'#FCA5A5',
+            display:'flex', gap:8, alignItems:'center' }}>
             ⚠ Failed to load results — {error}
           </div>
         )}
 
         {/* ── Stat row ── */}
         <div style={{
-          display: 'grid',
-          gridTemplateColumns: mobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(190px, 1fr))',
+          display:'grid',
+          gridTemplateColumns: mobile
+            ? 'repeat(2, 1fr)'
+            : 'repeat(auto-fit, minmax(180px, 1fr))',
           gap: mobile ? 8 : 12,
           marginBottom: mobile ? 16 : 24,
         }}>
-          <StatBlock label="Total votes" value={grandTotal}
-            sub={`${reportingWards} ward${reportingWards !== 1 ? 's' : ''} reporting`}
-            accent="var(--apc-green)" flash={flashStats} index={0}/>
+          <StatBlock label="Total votes cast" value={grandTotal}
+            sub={`${reportingWards} ward${reportingWards!==1?'s':''} reporting`}
+            accent="var(--green)" flash={flashStats} index={0}/>
+          <StatBlock label="APC total votes" value={apcData?.totalVotes ?? 0}
+            sub={apcPct ? `${apcPct}% of all votes` : 'Awaiting data'}
+            accent="#4ADE80" flash={flashStats} index={1}/>
+          <StatBlock label="APC Margin" value={apcMargin ?? '—'}
+            sub="Lead over 2nd place" accent="#86EFAC" flash={flashStats} index={2}/>
           <StatBlock label="Wards reporting" value={reportingWards}
-            sub="Results submitted" accent="var(--apc-gold)" flash={flashStats} index={1}/>
+            sub="Results received" accent="var(--gold)" flash={flashStats} index={3}/>
           <StatBlock label="Parties" value={parties.length}
-            sub="Contested" accent="#3b82f6" index={2}/>
+            sub="Contested" accent="#3B82F6" index={4}/>
           {leader ? (
-            <StatBlock label="Leader" value={leader.party}
+            <StatBlock label="Current leader" value={leader.party}
               sub={`${leader.totalVotes.toLocaleString()} · ${
-                grandTotal > 0 ? ((leader.totalVotes / grandTotal) * 100).toFixed(1) : 0
-              }%`}
-              accent={partyColor(leader.party, 0).bar} flash={flashStats} index={3}/>
+                grandTotal>0?((leader.totalVotes/grandTotal)*100).toFixed(1):0}%`}
+              accent={partyColor(leader.party,0).bar} flash={flashStats} index={5}/>
           ) : (
-            <StatBlock label="Leader" value="—" sub="Awaiting results" index={3}/>
+            <StatBlock label="Current leader" value="—" sub="Awaiting results" index={5}/>
           )}
         </div>
 
         {/* Loading skeletons */}
         {loading && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[160, 220, 140].map((h, i) => <Skeleton key={i} h={h} delay={i * 120}/>)}
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {[160,220,140,480].map((h,i) => <Skeleton key={i} h={h} delay={i*100}/>)}
           </div>
         )}
 
         {!loading && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap }}>
+          <div style={{ display:'flex', flexDirection:'column', gap }}>
 
-            {/* ── Row 1: Vote share bars ── */}
-            <Panel style={{ padding: panelPad }}>
+            {/* ── Vote share bars ── */}
+            <Panel style={{ padding:panelPad }}>
               <SectionHeader label="Vote share" right={`${parties.length} parties · ${scopeLabel}`}/>
               {parties.length === 0
-                ? <p style={{ fontSize: 12, color: 'var(--muted)', padding: '16px 0' }}>No data yet.</p>
-                : parties.map((p, i) => (
+                ? <p style={{ fontSize:12, color:'var(--muted)', padding:'16px 0' }}>No data yet.</p>
+                : parties.map((p,i) => (
                   <VoteBar key={p.party} party={p.party} votes={p.totalVotes}
-                    total={grandTotal} rank={i} delay={i * 90} isLeader={i === 0}/>
+                    total={grandTotal} rank={i} delay={i*90} isLeader={i===0}/>
                 ))
               }
             </Panel>
 
-            {/* ── Row 2: Bar chart + Pie chart ── */}
+            {/* ── Charts row ── */}
             <div style={{
-              display: 'grid',
+              display:'grid',
               gridTemplateColumns: mobile ? '1fr' : 'minmax(0,1.6fr) minmax(0,1fr)',
               gap,
             }}>
-              <Panel style={{ padding: panelPad }}>
+              <Panel style={{ padding:panelPad }}>
                 <SectionHeader label="Votes by party" right="Bar chart"/>
                 <VotesBarChart parties={parties}/>
               </Panel>
-              <Panel style={{ padding: panelPad }}>
+              <Panel style={{ padding:panelPad }}>
                 <SectionHeader label="Vote distribution" right="Pie chart"/>
                 <VotesPieChart parties={parties} grandTotal={grandTotal}/>
               </Panel>
             </div>
 
-            {/* ── Row 3: Live feed + Results table ── */}
+            {/* ── LGA Table (the new expandable section) ── */}
+            <div>
+              {lcdas.length > 0 ? (
+                <LGATable
+                  lcdas={lcdas}
+                  summary={summary}
+                  newestWardId={newestWardId}
+                  backendUrl={backendUrl}
+                />
+              ) : (
+                <Panel style={{ padding:panelPad }}>
+                  <SectionHeader label="LGA / LCDA Results" right="Click to expand wards"/>
+                  <p style={{ fontSize:12, color:'var(--muted)', padding:'16px 0' }}>
+                    Loading LGA list…
+                  </p>
+                </Panel>
+              )}
+            </div>
+
+            {/* ── Live feed + Results table ── */}
             <div style={{
-              display: 'grid',
+              display:'grid',
               gridTemplateColumns: mobile ? '1fr' : 'minmax(0,1fr) minmax(0,2fr)',
               gap,
-              ...(desktop ? { alignItems: 'start' } : {}),
+              ...(desktop ? { alignItems:'start' } : {}),
             }}>
               <Panel style={{
-                padding: panelPad,
+                padding:panelPad,
                 ...(mobile
-                  ? { maxHeight: 340 }
-                  : { maxHeight: 480, display: 'flex', flexDirection: 'column', overflow: 'hidden' }),
+                  ? { maxHeight:340 }
+                  : { maxHeight:480, display:'flex', flexDirection:'column', overflow:'hidden' }),
               }}>
                 <LiveFeed
-                  results={eventLog.length > 0 ? eventLog : results.slice(0, 15)}
-                  newestId={newestId}
+                  results={eventLog.length > 0 ? eventLog : results.slice(0,15)}
+                  newestId={newestWardId}
                 />
               </Panel>
 
               <Panel style={{
-                padding: panelPad,
+                padding:panelPad,
                 ...(mobile
                   ? {}
-                  : { maxHeight: 480, display: 'flex', flexDirection: 'column', overflow: 'hidden' }),
+                  : { maxHeight:480, display:'flex', flexDirection:'column', overflow:'hidden' }),
               }}>
                 <SectionHeader
                   label="Submitted ward results"
-                  right={`${results.length} record${results.length !== 1 ? 's' : ''}`}
+                  right={`${results.length} record${results.length!==1?'s':''}`}
                 />
-                <div style={{ overflowY: 'auto', flex: 1 }}>
-                  <ResultsTable results={results} newestId={newestId}/>
+                <div style={{ overflowY:'auto', flex:1 }}>
+                  <ResultsTable results={results} newestId={newestWardId}/>
                 </div>
               </Panel>
             </div>
@@ -1958,54 +950,49 @@ export default function Dashboard() {
         {/* Empty state */}
         {!loading && results.length === 0 && !error && (
           <div style={{
-            marginTop: 24,
-            padding: mobile ? '48px 16px' : '80px 24px',
-            textAlign: 'center',
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 16,
+            marginTop:24, padding: mobile ? '48px 16px' : '80px 24px',
+            textAlign:'center', background:'var(--surface)',
+            border:'1px solid var(--border)', borderRadius:16,
           }}>
-            <div style={{ marginBottom: 16, display: 'inline-block' }}>
+            <div style={{ marginBottom:16, display:'inline-block' }}>
               <APCMark size={mobile ? 40 : 52}/>
             </div>
-            <h3 style={{ fontFamily: 'var(--display)', fontSize: mobile ? 20 : 24,
-              fontWeight: 800, color: 'var(--text)', marginBottom: 10, letterSpacing: '-0.02em' }}>
+            <h3 style={{ fontFamily:'var(--display)', fontSize: mobile ? 20 : 24,
+              fontWeight:800, color:'var(--text)', marginBottom:10, letterSpacing:'-0.02em' }}>
               Awaiting First Results
             </h3>
-            <p style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--muted)',
-              maxWidth: 320, margin: '0 auto', lineHeight: 1.8 }}>
-              {scope === 'all'
+            <p style={{ fontFamily:'var(--mono)', fontSize:12, color:'var(--muted)',
+              maxWidth:320, margin:'0 auto', lineHeight:1.8 }}>
+              {scope==='all'
                 ? 'As ward agents submit results, they will appear here in real-time.'
                 : `No results yet for ${scopeLabel}.`}
             </p>
-            <div style={{ marginTop: 20 }}>
-              <LivePulse active={connected}/>
-            </div>
+            <div style={{ marginTop:20 }}><LivePulse active={connected}/></div>
           </div>
         )}
       </main>
 
-      {/* ══ FOOTER ════════════════════════════════════════════════════ */}
-      <footer style={{ borderTop: '1px solid var(--border)', background: 'var(--surface)',
+      {/* ══ FOOTER ══════════════════════════════════════════════════ */}
+      <footer style={{ borderTop:'1px solid var(--border)', background:'var(--surface)',
         padding: mobile ? '12px 16px' : '14px 24px' }}>
-        <div style={{ maxWidth: 1600, margin: '0 auto', display: 'flex', alignItems: 'center',
-          justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ maxWidth:1700, margin:'0 auto', display:'flex', alignItems:'center',
+          justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             <APCMark size={mobile ? 16 : 20}/>
-            <span style={{ fontFamily: 'var(--display)', fontWeight: 700,
-              fontSize: mobile ? 11 : 13, color: 'var(--text)' }}>
+            <span style={{ fontFamily:'var(--display)', fontWeight:700,
+              fontSize: mobile ? 11 : 13, color:'var(--text)' }}>
               APC Results Centre
             </span>
             {!mobile && (
-              <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)' }}>
+              <span style={{ fontFamily:'var(--mono)', fontSize:10, color:'var(--muted)' }}>
                 All Progressives Congress · {scopeLabel}
               </span>
             )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: mobile ? 12 : 20,
-            fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)' }}>
+          <div style={{ display:'flex', alignItems:'center', gap: mobile ? 12 : 20,
+            fontFamily:'var(--mono)', fontSize:10, color:'var(--muted)' }}>
             <LivePulse active={connected}/>
-            <span>{reportingWards} ward{reportingWards !== 1 ? 's' : ''}</span>
+            <span>{reportingWards} ward{reportingWards!==1?'s':''}</span>
             <span>{format(clock, mobile ? 'HH:mm' : 'HH:mm · dd MMM yyyy')}</span>
           </div>
         </div>
@@ -2013,3 +1000,917 @@ export default function Dashboard() {
     </div>
   );
 }
+
+
+
+
+/**
+ * pages/Dashboard.jsx
+ *
+ * APC Command Centre — full rewrite.
+ *
+ * Key changes vs previous version:
+ *  1. Optimistic socket updates: mutate() called BEFORE refetch so stats update
+ *     in <50ms when an agent submits — no waiting for network round-trip.
+ *  2. LGATable is always expanded — all LGAs + their wards visible at once,
+ *     Excel-style: ranked, with net votes, polling units, APC %, inline donut+bar.
+ *  3. refreshKey debounced — socket events no longer fire simultaneous refetches;
+ *     one refetch fires 1.5s after the last socket event settles.
+ *  4. Ticker, header APC pill, stat blocks all react to optimistic summary.
+ */
+
+// import { useState, useEffect, useRef, useCallback } from 'react';
+// import { formatDistanceToNow, format } from 'date-fns';
+// import { useSocket }  from '../hooks/useSocket';
+// import { useSummary } from '../hooks/useSummary';
+// import VotesBarChart  from '../components/VotesBarChart';
+// import VotesPieChart  from '../components/VotesPieChart';
+// import LiveFeed       from '../components/LiveFeed';
+// import ResultsTable   from '../components/ResultsTable';
+// import LGATable       from '../components/LGATable';
+
+// // ─── Global styles ────────────────────────────────────────────────────────────
+// const STYLE_ID = 'apc-dashboard-v7';
+// if (typeof document !== 'undefined' && !document.getElementById(STYLE_ID)) {
+//   const s = document.createElement('style');
+//   s.id = STYLE_ID;
+//   s.textContent = `
+//     @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=JetBrains+Mono:wght@300;400;500;700&display=swap');
+
+//     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+//     :root {
+//       --green:     #006B35;
+//       --green2:    #008C45;
+//       --gold:      #C9A84C;
+//       --gold2:     #E8C76A;
+//       --bg:        #04080A;
+//       --surface:   #081210;
+//       --surface-2: #0C1A14;
+//       --surface-3: #112119;
+//       --border:    rgba(0,107,53,0.16);
+//       --border-2:  rgba(0,107,53,0.35);
+//       --muted:     rgba(180,220,200,0.42);
+//       --text:      #D0EDDC;
+//       --mono:      'JetBrains Mono', monospace;
+//       --display:   'Syne', sans-serif;
+//     }
+
+//     body { overflow-x: hidden; background: var(--bg); }
+//     body::before {
+//       content:''; position:fixed; inset:0; z-index:0; pointer-events:none;
+//       background:
+//         radial-gradient(ellipse 80% 50% at 50% -10%, rgba(0,107,53,0.1), transparent),
+//         radial-gradient(ellipse 40% 30% at 90% 85%,  rgba(201,168,76,0.04), transparent);
+//     }
+//     body::after {
+//       content:''; position:fixed; inset:0; z-index:9999; pointer-events:none; opacity:0.02;
+//       background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+//     }
+
+//     @keyframes pulse-ring {
+//       0%   { transform:scale(1); opacity:1; }
+//       100% { transform:scale(2.6); opacity:0; }
+//     }
+//     @keyframes slide-up {
+//       from { opacity:0; transform:translateY(14px); }
+//       to   { opacity:1; transform:translateY(0); }
+//     }
+//     @keyframes bar-in {
+//       from { width:0; }
+//       to   { width:var(--w); }
+//     }
+//     @keyframes count-flash {
+//       0%,100% { color:var(--text); }
+//       50%     { color:var(--gold2); }
+//     }
+//     @keyframes border-flash {
+//       0%,100% { border-color:var(--border); }
+//       45%     { border-color:var(--gold); box-shadow:0 0 24px rgba(201,168,76,0.15); }
+//     }
+//     @keyframes shimmer {
+//       0%   { background-position:-200% 0; }
+//       100% { background-position:200% 0; }
+//     }
+//     @keyframes ticker-scroll {
+//       from { transform:translateX(0); }
+//       to   { transform:translateX(-50%); }
+//     }
+//     @keyframes spin { to { transform:rotate(360deg); } }
+
+//     .apc-slide-up  { animation:slide-up 0.48s cubic-bezier(0.22,1,0.36,1) both; }
+//     .apc-bar       { animation:bar-in 1.2s cubic-bezier(0.22,1,0.36,1) both; animation-delay:var(--delay,0ms); }
+//     .apc-flash     { animation:border-flash 0.7s ease 2; }
+//     .apc-count-pop { animation:count-flash 0.55s ease; }
+
+//     .ticker-track { display:flex; animation:ticker-scroll 45s linear infinite; width:max-content; }
+//     .ticker-track:hover { animation-play-state:paused; }
+
+//     ::-webkit-scrollbar             { width:3px; height:3px; }
+//     ::-webkit-scrollbar-track       { background:var(--surface); }
+//     ::-webkit-scrollbar-thumb       { background:var(--green); border-radius:2px; }
+//     ::-webkit-scrollbar-thumb:hover { background:var(--green2); }
+
+//     .scope-select {
+//       appearance:none;
+//       background:var(--surface-2);
+//       border:1px solid var(--border-2);
+//       border-radius:8px;
+//       color:var(--text);
+//       font-family:var(--mono);
+//       font-size:11px;
+//       padding:6px 28px 6px 10px;
+//       cursor:pointer;
+//       background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%234ADE80' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+//       background-repeat:no-repeat;
+//       background-position:right 8px center;
+//       transition:border-color 0.2s;
+//     }
+//     .scope-select:focus  { outline:none; border-color:var(--gold); }
+//     .scope-select:disabled { opacity:0.35; cursor:not-allowed; }
+//     .scope-select option { background:#0C1A14; }
+//   `;
+//   document.head.appendChild(s);
+// }
+
+// // ─── Helpers ──────────────────────────────────────────────────────────────────
+// function useWindowSize() {
+//   const [w, setW] = useState(typeof window !== 'undefined' ? window.innerWidth : 1280);
+//   useEffect(() => {
+//     const h = () => setW(window.innerWidth);
+//     window.addEventListener('resize', h, { passive:true });
+//     return () => window.removeEventListener('resize', h);
+//   }, []);
+//   return { mobile:w<768, desktop:w>=1024 };
+// }
+
+// const PARTY_PALETTE = {
+//   APC:  { bar:'#006B35', glow:'rgba(0,107,53,0.5)',   label:'#4ADE80' },
+//   PDP:  { bar:'#1D4ED8', glow:'rgba(29,78,216,0.4)',  label:'#93C5FD' },
+//   LP:   { bar:'#B45309', glow:'rgba(180,83,9,0.4)',   label:'#FCD34D' },
+//   NNPP: { bar:'#7C3AED', glow:'rgba(124,58,237,0.4)', label:'#C4B5FD' },
+// };
+// const FALLBACKS = [
+//   { bar:'#0E7490', glow:'rgba(14,116,144,0.4)', label:'#67E8F9' },
+//   { bar:'#BE185D', glow:'rgba(190,24,93,0.4)',  label:'#F9A8D4' },
+// ];
+// const partyColor = (party, rank) =>
+//   PARTY_PALETTE[(party||'').toUpperCase().trim()] || FALLBACKS[rank % FALLBACKS.length];
+
+// const fmt  = n => (n ?? 0).toLocaleString();
+// const pct  = (a, b) => b > 0 ? ((a/b)*100).toFixed(1) : '0.0';
+
+// // ─── Sub-components ───────────────────────────────────────────────────────────
+// function APCMark({ size = 60 }) {
+//   return (
+//     <svg width={size} height={size*1.1} viewBox="0 0 200 220" fill="none"
+//       xmlns="http://www.w3.org/2000/svg" style={{ flexShrink:0 }}>
+//       <rect x="10" y="10" width="60"  height="160" fill="#009A44"/>
+//       <rect x="70" y="10" width="60"  height="160" fill="#FFFFFF"/>
+//       <rect x="130" y="10" width="60" height="160" fill="#87CEEB"/>
+//       {[[62,20,2.2],[68,18,2],[74,16,1.8],[80,14,1.8],[86,13,2],[91,12,2.2],
+//         [96,12,2.4],[100,12,2.8],[104,12,2.4],[109,12,2.2],[114,13,2],
+//         [120,14,1.8],[126,16,1.8],[132,18,2],[138,20,2.2],
+//       ].map(([x2,y2,sw],i) => (
+//         <line key={i} x1="100" y1="115" x2={x2} y2={y2}
+//           stroke={i%2===0?'#C8A96E':'#D4B87A'} strokeWidth={sw} strokeLinecap="round"/>
+//       ))}
+//       <ellipse cx="100" cy="132" rx="13" ry="16" fill="#8B5E3C"/>
+//       <rect x="89" y="144" width="22" height="22" rx="5" fill="#8B5E3C"/>
+//       <rect x="10" y="170" width="180" height="40" fill="#CC1E1E"/>
+//       <text x="100" y="198" textAnchor="middle"
+//         fontFamily="Arial Black,Arial,sans-serif" fontSize="28" fontWeight="900"
+//         fill="#FFFFFF" letterSpacing="4">APC</text>
+//     </svg>
+//   );
+// }
+
+// function LivePulse({ active }) {
+//   return (
+//     <span style={{ display:'inline-flex', alignItems:'center', gap:7 }}>
+//       <span style={{ position:'relative', width:9, height:9, flexShrink:0 }}>
+//         <span style={{
+//           display:'block', width:9, height:9, borderRadius:'50%',
+//           background:active?'#4ADE80':'#374151',
+//           boxShadow:active?'0 0 8px #4ADE8099':'none',
+//         }}/>
+//         {active && <span style={{
+//           position:'absolute', inset:0, borderRadius:'50%',
+//           border:'1.5px solid #4ADE80',
+//           animation:'pulse-ring 1.8s ease-out infinite',
+//         }}/>}
+//       </span>
+//       <span style={{
+//         fontFamily:'var(--mono)', fontSize:10, letterSpacing:'0.14em',
+//         textTransform:'uppercase', fontWeight:500,
+//         color:active?'#4ADE80':'#4B5563',
+//       }}>{active?'Live':'Offline'}</span>
+//     </span>
+//   );
+// }
+
+// function SectionHeader({ label, right }) {
+//   return (
+//     <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:18 }}>
+//       <div style={{ display:'flex', alignItems:'center', gap:9 }}>
+//         <span style={{ display:'block', width:3, height:13, borderRadius:2,
+//           background:'var(--gold)', boxShadow:'0 0 8px rgba(201,168,76,0.45)' }}/>
+//         <span style={{ fontFamily:'var(--mono)', fontSize:10, letterSpacing:'0.18em',
+//           textTransform:'uppercase', color:'var(--gold)', fontWeight:500 }}>{label}</span>
+//       </div>
+//       {right && <span style={{ fontFamily:'var(--mono)', fontSize:10, color:'var(--muted)' }}>{right}</span>}
+//     </div>
+//   );
+// }
+
+// function StatBlock({ label, value, sub, accent, flash, index=0 }) {
+//   const display = typeof value==='number' ? value.toLocaleString() : (value??'—');
+//   return (
+//     <div className={`apc-slide-up${flash?' apc-flash':''}`} style={{
+//       animationDelay:`${index*70}ms`,
+//       padding:'18px 20px 16px',
+//       background:'var(--surface)',
+//       border:'1px solid var(--border)',
+//       borderRadius:10, position:'relative', overflow:'hidden',
+//       transition:'border-color 0.4s, box-shadow 0.4s',
+//     }}>
+//       <span style={{
+//         position:'absolute', top:0, left:0, right:0, height:2,
+//         background:accent||'var(--green)', borderRadius:'10px 10px 0 0',
+//       }}/>
+//       <p style={{ fontFamily:'var(--mono)', fontSize:9, letterSpacing:'0.16em',
+//         textTransform:'uppercase', color:'var(--muted)', marginBottom:8 }}>{label}</p>
+//       <p className={flash?'apc-count-pop':''} style={{
+//         fontFamily:'var(--display)', fontSize:'clamp(20px,2.4vw,30px)',
+//         fontWeight:800, color:'var(--text)', lineHeight:1, letterSpacing:'-0.03em',
+//       }}>{display}</p>
+//       {sub && <p style={{ fontFamily:'var(--mono)', fontSize:10, color:'var(--muted)',
+//         marginTop:6, lineHeight:1.5 }}>{sub}</p>}
+//     </div>
+//   );
+// }
+
+// function VoteBar({ party, votes, total, rank, delay, isLeader }) {
+//   const p = total > 0 ? (votes/total)*100 : 0;
+//   const { bar, glow, label } = partyColor(party, rank);
+//   return (
+//     <div className="apc-slide-up" style={{ animationDelay:`${delay}ms`, marginBottom:18 }}>
+//       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+//         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+//           {isLeader && <span style={{
+//             fontFamily:'var(--mono)', fontSize:9, letterSpacing:'0.1em',
+//             background:'var(--gold)', color:'#04080A',
+//             padding:'2px 7px', borderRadius:3, fontWeight:600, textTransform:'uppercase',
+//           }}>Leading</span>}
+//           <span style={{ fontFamily:'var(--display)', fontSize:13, fontWeight:700, color:'var(--text)' }}>
+//             {party}
+//           </span>
+//         </div>
+//         <div style={{ display:'flex', alignItems:'baseline', gap:8 }}>
+//           <span style={{ fontFamily:'var(--mono)', fontSize:14, fontWeight:500, color:label }}>
+//             {votes.toLocaleString()}
+//           </span>
+//           <span style={{ fontFamily:'var(--mono)', fontSize:10, color:'var(--muted)' }}>
+//             {p.toFixed(1)}%
+//           </span>
+//         </div>
+//       </div>
+//       <div style={{ height:5, background:'rgba(255,255,255,0.06)', borderRadius:3, overflow:'hidden' }}>
+//         <div className="apc-bar" style={{
+//           '--w':`${p}%`, '--delay':`${delay+200}ms`,
+//           width:`${p}%`, height:'100%', background:bar,
+//           borderRadius:3, boxShadow:`0 0 10px ${glow}`,
+//         }}/>
+//       </div>
+//     </div>
+//   );
+// }
+
+// function Ticker({ parties, grandTotal }) {
+//   if (!parties.length) return null;
+//   const items = [...parties, ...parties];
+//   return (
+//     <div style={{ overflow:'hidden', background:'var(--surface-3)', borderBottom:'1px solid var(--border)' }}>
+//       <div className="ticker-track" style={{ padding:'6px 0' }}>
+//         {items.map((p, i) => {
+//           const share = grandTotal>0 ? ((p.totalVotes/grandTotal)*100).toFixed(1) : '0.0';
+//           const { label } = partyColor(p.party, i%parties.length);
+//           return (
+//             <span key={i} style={{
+//               display:'inline-flex', alignItems:'center', gap:6,
+//               padding:'0 20px', borderRight:'1px solid var(--border)',
+//               fontFamily:'var(--mono)', fontSize:10, whiteSpace:'nowrap',
+//             }}>
+//               <span style={{ fontWeight:600, color:label }}>{p.party}</span>
+//               <span style={{ color:'var(--text)' }}>{p.totalVotes.toLocaleString()}</span>
+//               <span style={{ color:'var(--muted)' }}>({share}%)</span>
+//             </span>
+//           );
+//         })}
+//       </div>
+//     </div>
+//   );
+// }
+
+// function Skeleton({ h=120, delay=0 }) {
+//   return <div style={{
+//     height:h, borderRadius:12,
+//     background:'linear-gradient(90deg,var(--surface) 25%,var(--surface-2) 50%,var(--surface) 75%)',
+//     backgroundSize:'200% 100%',
+//     animation:'shimmer 1.9s ease infinite',
+//     animationDelay:`${delay}ms`,
+//   }}/>;
+// }
+
+// function Panel({ children, style }) {
+//   return (
+//     <div style={{
+//       background:'var(--surface)', border:'1px solid var(--border)',
+//       borderRadius:14, padding:'20px', ...style,
+//     }}>{children}</div>
+//   );
+// }
+
+// function ScopeBar({ lcdas, wards, scope, lcdaId, wardId, onChange, onLcdaChange, mobile }) {
+//   return (
+//     <div style={{
+//       display:'flex', flexWrap:'wrap', alignItems:'center',
+//       gap:mobile?8:12, padding:mobile?'10px 16px':'10px 24px',
+//       background:'var(--surface-2)', borderBottom:'1px solid var(--border)',
+//     }}>
+//       <span style={{ fontFamily:'var(--mono)', fontSize:10, letterSpacing:'0.16em',
+//         textTransform:'uppercase', color:'var(--muted)', flexShrink:0 }}>Filter</span>
+
+//       <button onClick={() => onChange({ scope:'all', lcdaId:'', wardId:'' })} style={{
+//         fontFamily:'var(--mono)', fontSize:11, padding:'5px 12px', borderRadius:6, cursor:'pointer',
+//         border:`1px solid ${scope==='all'?'var(--gold)':'var(--border)'}`,
+//         background:scope==='all'?'rgba(201,168,76,0.12)':'transparent',
+//         color:scope==='all'?'var(--gold)':'var(--muted)', transition:'all 0.2s',
+//       }}>All Lagos</button>
+
+//       <select className="scope-select" value={lcdaId}
+//         onChange={e => {
+//           const id = e.target.value;
+//           onLcdaChange(id);
+//           onChange({ scope:id?'lcda':'all', lcdaId:id, wardId:'' });
+//         }}>
+//         <option value="">— Select LCDA —</option>
+//         {lcdas.map(l => <option key={l._id} value={l._id}>{l.name}</option>)}
+//       </select>
+
+//       {lcdaId && <>
+//         <svg width="10" height="10" fill="none" viewBox="0 0 24 24"
+//           stroke="rgba(180,220,200,0.3)" strokeWidth={2.5}>
+//           <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
+//         </svg>
+//         <select className="scope-select" value={wardId}
+//           onChange={e => {
+//             const id = e.target.value;
+//             onChange({ scope:id?'ward':'lcda', lcdaId, wardId:id });
+//           }}>
+//           <option value="">— All wards —</option>
+//           {wards.map(w => <option key={w._id} value={w._id}>{w.name}</option>)}
+//         </select>
+//       </>}
+
+//       {scope!=='all' && (
+//         <span style={{
+//           marginLeft:'auto', fontFamily:'var(--mono)', fontSize:9,
+//           letterSpacing:'0.12em', textTransform:'uppercase',
+//           padding:'3px 8px', borderRadius:4,
+//           background:scope==='ward'?'rgba(0,107,53,0.25)':'rgba(201,168,76,0.15)',
+//           color:scope==='ward'?'#4ADE80':'var(--gold)',
+//           border:`1px solid ${scope==='ward'?'rgba(0,107,53,0.5)':'rgba(201,168,76,0.35)'}`,
+//         }}>{scope==='ward'?'Ward view':'LCDA view'}</span>
+//       )}
+//     </div>
+//   );
+// }
+
+// // ═════════════════════════════════════════════════════════════════════════════
+// //  DASHBOARD
+// // ═════════════════════════════════════════════════════════════════════════════
+// export default function Dashboard() {
+//   const { mobile, desktop } = useWindowSize();
+//   const backendUrl = import.meta.env.VITE_API_URL;
+
+//   // ── Scope ──────────────────────────────────────────────────────────────────
+//   const [scope,  setScope]  = useState('all');
+//   const [lcdaId, setLcdaId] = useState('');
+//   const [wardId, setWardId] = useState('');
+//   const [lcdas,  setLcdas]  = useState([]);
+//   const [wards,  setWards]  = useState([]);
+
+//   useEffect(() => {
+//     fetch(`${backendUrl}/results/lcdas`)
+//       .then(r => r.json())
+//       .then(d => setLcdas(d.lcdas ?? d))
+//       .catch(console.error);
+//   }, [backendUrl]);
+
+//   useEffect(() => {
+//     if (!lcdaId) { setWards([]); return; }
+//     fetch(`${backendUrl}/results/lcdas/${lcdaId}/wards`)
+//       .then(r => r.json())
+//       .then(d => setWards(d.wards ?? d))
+//       .catch(console.error);
+//   }, [lcdaId, backendUrl]);
+
+//   // ── Real-time ──────────────────────────────────────────────────────────────
+//   const [refreshKey,   setRefreshKey]   = useState(0);
+//   const [newestWardId, setNewestWardId] = useState(null);
+//   const [flashStats,   setFlashStats]   = useState(false);
+//   const [lastUpdate,   setLastUpdate]   = useState(null);
+//   const [eventLog,     setEventLog]     = useState([]);
+//   const [clock,        setClock]        = useState(new Date());
+//   const flashTimer   = useRef(null);
+//   const refreshTimer = useRef(null);   // debounce refetches
+
+//   const { connected, newResult, updatedResult, optimisticPatch } = useSocket();
+
+//   const scopeParams = scope==='all' ? {}
+//     : scope==='lcda' ? { scope:'lcda', id:lcdaId }
+//     : { scope:'ward', id:wardId };
+
+//   const { summary, results, loading, error, mutate } = useSummary(refreshKey, scopeParams);
+
+//   useEffect(() => {
+//     const t = setInterval(() => setClock(new Date()), 1000);
+//     return () => clearInterval(t);
+//   }, []);
+
+//   // ── Socket: new_result ──────────────────────────────────────────────────────
+//   useEffect(() => {
+//     if (!newResult) return;
+//     const r = newResult.result ?? newResult;
+//     if (scope==='lcda' && String(r?.lcda?._id??r?.lcda) !== lcdaId) return;
+//     if (scope==='ward'  && String(r?.ward?._id??r?.ward) !== wardId)  return;
+
+//     const wardMongoId = String(r?.ward?._id ?? r?.ward ?? '');
+
+//     // 1. Optimistic: update summary instantly from socket payload
+//     if (optimisticPatch) mutate(optimisticPatch);
+
+//     // 2. Update ward highlight + event log + flash
+//     setNewestWardId(wardMongoId);
+//     setLastUpdate(new Date());
+//     setFlashStats(true);
+//     setEventLog(log => [r, ...log].slice(0, 30));
+
+//     clearTimeout(flashTimer.current);
+//     flashTimer.current = setTimeout(() => {
+//       setFlashStats(false);
+//       setNewestWardId(null);
+//     }, 4000);
+
+//     // 3. Debounce actual refetch — fires 1.5s after last socket event
+//     //    This avoids hammering the server when multiple agents submit at once
+//     clearTimeout(refreshTimer.current);
+//     refreshTimer.current = setTimeout(() => setRefreshKey(k => k+1), 1500);
+
+//   }, [newResult]); // eslint-disable-line react-hooks/exhaustive-deps
+
+//   // ── Socket: result_updated (verify/reject) ─────────────────────────────────
+//   useEffect(() => {
+//     if (!updatedResult) return;
+//     clearTimeout(refreshTimer.current);
+//     refreshTimer.current = setTimeout(() => setRefreshKey(k => k+1), 800);
+//   }, [updatedResult]);
+
+//   useEffect(() => () => {
+//     clearTimeout(flashTimer.current);
+//     clearTimeout(refreshTimer.current);
+//   }, []);
+
+//   const handleScopeChange = useCallback(({ scope:s, lcdaId:l, wardId:w }) => {
+//     setScope(s); setLcdaId(l); setWardId(w);
+//     setRefreshKey(k => k+1); setEventLog([]);
+//   }, []);
+
+//   // ── Derived ────────────────────────────────────────────────────────────────
+//   const parties        = summary?.parties        ?? [];
+//   const grandTotal     = summary?.grandTotal     ?? 0;
+//   const reportingWards = summary?.reportingUnits ?? 0;
+//   const leader         = parties[0];
+//   const apcData        = parties.find(p => (p.party??'').toUpperCase()==='APC');
+//   const apcPct         = grandTotal>0 && apcData
+//     ? ((apcData.totalVotes/grandTotal)*100).toFixed(1) : null;
+//   const apcMargin = (() => {
+//     if (!apcData || parties.length<2) return null;
+//     const second = parties.find(p => (p.party??'').toUpperCase()!=='APC');
+//     return second ? apcData.totalVotes - second.totalVotes : null;
+//   })();
+
+//   const px       = mobile ? 16 : 24;
+//   const gap      = mobile ? 10 : 14;
+//   const panelPad = mobile ? '16px' : '22px 24px';
+
+//   const scopeLabel = scope==='all' ? 'Lagos State'
+//     : scope==='lcda' ? (lcdas.find(l=>l._id===lcdaId)?.name ?? 'LCDA')
+//     : (wards.find(w=>w._id===wardId)?.name ?? 'Ward');
+
+//   // ── Render ─────────────────────────────────────────────────────────────────
+//   return (
+//     <div style={{ minHeight:'100vh', background:'var(--bg)',
+//       color:'var(--text)', fontFamily:'var(--mono)', overflowX:'hidden' }}>
+
+//       {/* ══ HEADER ═════════════════════════════════════════════════ */}
+//       <header style={{
+//         position:'sticky', top:0, zIndex:100,
+//         background:'rgba(4,8,10,0.96)',
+//         borderBottom:'1px solid var(--border-2)',
+//         backdropFilter:'blur(18px)',
+//       }}>
+//         {mobile ? (
+//           <div style={{ padding:'0 16px' }}>
+//             <div style={{ height:52, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+//               <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+//                 <APCMark size={26}/>
+//                 <div>
+//                   <p style={{ fontFamily:'var(--display)', fontWeight:800, fontSize:14,
+//                     color:'var(--text)', letterSpacing:'-0.02em', lineHeight:1.1 }}>
+//                     APC Command Centre
+//                   </p>
+//                   <p style={{ fontFamily:'var(--mono)', fontSize:8, color:'var(--muted)',
+//                     letterSpacing:'0.12em', textTransform:'uppercase', marginTop:1 }}>
+//                     Lagos 2025 LGA Elections
+//                   </p>
+//                 </div>
+//               </div>
+//               <LivePulse active={connected}/>
+//             </div>
+//             {apcData && (
+//               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+//                 paddingBottom:10, gap:10 }}>
+//                 <div style={{ display:'flex', alignItems:'center', gap:12, padding:'6px 14px',
+//                   background:'rgba(0,107,53,0.1)', border:'1px solid rgba(0,107,53,0.28)',
+//                   borderRadius:8, flex:1 }}>
+//                   <div>
+//                     <p style={{ fontFamily:'var(--display)', fontSize:17, fontWeight:800,
+//                       color:'#4ADE80', letterSpacing:'-0.03em', lineHeight:1 }}>
+//                       {apcData.totalVotes.toLocaleString()}
+//                     </p>
+//                     <p style={{ fontFamily:'var(--mono)', fontSize:8, color:'var(--muted)', marginTop:1 }}>
+//                       APC VOTES
+//                     </p>
+//                   </div>
+//                   {apcPct && <>
+//                     <span style={{ width:1, height:24, background:'var(--border-2)' }}/>
+//                     <div>
+//                       <p style={{ fontFamily:'var(--display)', fontSize:17, fontWeight:800,
+//                         color:'var(--gold)', letterSpacing:'-0.03em', lineHeight:1 }}>{apcPct}%</p>
+//                       <p style={{ fontFamily:'var(--mono)', fontSize:8, color:'var(--muted)', marginTop:1 }}>
+//                         SHARE
+//                       </p>
+//                     </div>
+//                   </>}
+//                 </div>
+//                 <div style={{ textAlign:'right', flexShrink:0 }}>
+//                   <p style={{ fontFamily:'var(--mono)', fontSize:13, fontWeight:500, color:'var(--text)' }}>
+//                     {format(clock,'HH:mm:ss')}
+//                   </p>
+//                   <p style={{ fontFamily:'var(--mono)', fontSize:8, color:'var(--muted)', marginTop:1 }}>
+//                     {format(clock,'dd MMM yyyy')}
+//                   </p>
+//                 </div>
+//               </div>
+//             )}
+//           </div>
+//         ) : (
+//           <div style={{ maxWidth:1700, margin:'0 auto', padding:`0 ${px}px`,
+//             height:60, display:'flex', alignItems:'center', justifyContent:'space-between', gap:16 }}>
+//             <div style={{ display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+//               <APCMark size={32}/>
+//               <div>
+//                 <p style={{ fontFamily:'var(--display)', fontWeight:800, fontSize:16,
+//                   color:'var(--text)', letterSpacing:'-0.02em', lineHeight:1.1 }}>
+//                   APC Command Centre
+//                 </p>
+//                 <p style={{ fontFamily:'var(--mono)', fontSize:9, color:'var(--muted)',
+//                   letterSpacing:'0.14em', textTransform:'uppercase', marginTop:1 }}>
+//                   Lagos 2025 LGA Chairmanship Elections
+//                 </p>
+//               </div>
+//             </div>
+
+//             {apcData && (
+//               <div style={{ display:'flex', alignItems:'center', gap:16, flexShrink:0,
+//                 padding:'8px 20px', background:'rgba(0,107,53,0.1)',
+//                 border:'1px solid rgba(0,107,53,0.28)', borderRadius:10 }}>
+//                 <div style={{ textAlign:'center' }}>
+//                   <p style={{ fontFamily:'var(--display)', fontSize:22, fontWeight:800,
+//                     color:'#4ADE80', letterSpacing:'-0.03em', lineHeight:1 }}>
+//                     {apcData.totalVotes.toLocaleString()}
+//                   </p>
+//                   <p style={{ fontFamily:'var(--mono)', fontSize:9, color:'var(--muted)', marginTop:2 }}>
+//                     APC VOTES
+//                   </p>
+//                 </div>
+//                 {apcPct && <>
+//                   <span style={{ width:1, height:28, background:'var(--border-2)', flexShrink:0 }}/>
+//                   <div style={{ textAlign:'center' }}>
+//                     <p style={{ fontFamily:'var(--display)', fontSize:22, fontWeight:800,
+//                       color:'var(--gold)', letterSpacing:'-0.03em', lineHeight:1 }}>{apcPct}%</p>
+//                     <p style={{ fontFamily:'var(--mono)', fontSize:9, color:'var(--muted)', marginTop:2 }}>
+//                       VOTE SHARE
+//                     </p>
+//                   </div>
+//                 </>}
+//                 {apcMargin!=null && <>
+//                   <span style={{ width:1, height:28, background:'var(--border-2)', flexShrink:0 }}/>
+//                   <div style={{ textAlign:'center' }}>
+//                     <p style={{ fontFamily:'var(--display)', fontSize:16, fontWeight:800,
+//                       color:'#86EFAC', letterSpacing:'-0.02em', lineHeight:1 }}>
+//                       +{apcMargin.toLocaleString()}
+//                     </p>
+//                     <p style={{ fontFamily:'var(--mono)', fontSize:9, color:'var(--muted)', marginTop:2 }}>
+//                       MARGIN
+//                     </p>
+//                   </div>
+//                 </>}
+//               </div>
+//             )}
+
+//             <div style={{ display:'flex', alignItems:'center', gap:18, flexShrink:0 }}>
+//               <div style={{ textAlign:'right' }}>
+//                 <p style={{ fontFamily:'var(--mono)', fontSize:15, fontWeight:500,
+//                   color:'var(--text)', letterSpacing:'-0.01em' }}>
+//                   {format(clock,'HH:mm:ss')}
+//                 </p>
+//                 <p style={{ fontFamily:'var(--mono)', fontSize:9, color:'var(--muted)', marginTop:1 }}>
+//                   {format(clock,'dd MMM yyyy')}
+//                 </p>
+//               </div>
+//               <span style={{ width:1, height:28, background:'var(--border)' }}/>
+//               <LivePulse active={connected}/>
+//             </div>
+//           </div>
+//         )}
+//       </header>
+
+//       <Ticker parties={parties} grandTotal={grandTotal}/>
+
+//       <ScopeBar
+//         lcdas={lcdas} wards={wards}
+//         scope={scope} lcdaId={lcdaId} wardId={wardId}
+//         onChange={handleScopeChange}
+//         onLcdaChange={id => { setLcdaId(id); setWards([]); }}
+//         mobile={mobile}
+//       />
+
+//       {/* ══ HERO ════════════════════════════════════════════════════ */}
+//       <div style={{
+//         background:'linear-gradient(180deg,var(--surface) 0%,var(--bg) 100%)',
+//         borderBottom:'1px solid var(--border)',
+//         padding:mobile?'24px 16px 20px':'36px 24px 32px',
+//         position:'relative', overflow:'hidden',
+//       }}>
+//         {!mobile && (
+//           <div style={{
+//             position:'absolute', right:-20, top:'50%', transform:'translateY(-50%)',
+//             opacity:0.05, pointerEvents:'none', userSelect:'none',
+//             fontFamily:'var(--display)', fontWeight:800,
+//             fontSize:'clamp(90px,12vw,160px)', lineHeight:1,
+//             color:'#ffffff', letterSpacing:'-0.04em',
+//           }}>APC</div>
+//         )}
+//         <div style={{ maxWidth:1700, margin:'0 auto', position:'relative' }}>
+//           <p style={{
+//             fontFamily:'var(--mono)', fontSize:10, letterSpacing:'0.22em',
+//             textTransform:'uppercase', color:'var(--gold)',
+//             marginBottom:10, display:'flex', alignItems:'center', gap:8,
+//           }}>
+//             <span style={{ display:'inline-block', width:6, height:6, borderRadius:1, background:'var(--gold)' }}/>
+//             LGA Chairmanship 2025 · {scopeLabel}
+//           </p>
+//           <div style={{ display:'flex', flexWrap:'wrap', alignItems:'flex-end',
+//             justifyContent:'space-between', gap:20 }}>
+//             <div style={{ minWidth:0 }}>
+//               <h1 style={{
+//                 fontFamily:'var(--display)',
+//                 fontSize:mobile?'clamp(24px,7vw,34px)':'clamp(28px,3.5vw,50px)',
+//                 fontWeight:800, lineHeight:1.02, letterSpacing:'-0.04em', color:'var(--text)',
+//               }}>
+//                 Live Election{mobile?' ':<br/>}
+//                 <span style={{ color:'var(--gold)', textShadow:'0 0 40px rgba(201,168,76,0.2)' }}>
+//                   Results Dashboard
+//                 </span>
+//               </h1>
+//               {leader && (
+//                 <p style={{ marginTop:12, fontFamily:'var(--mono)',
+//                   fontSize:mobile?11:12, color:'var(--muted)', lineHeight:1.8 }}>
+//                   Leading — {' '}
+//                   <span style={{ color:partyColor(leader.party,0).label, fontWeight:500 }}>
+//                     {leader.party}
+//                   </span>
+//                   {' · '}
+//                   <span style={{ color:'var(--text)' }}>{leader.totalVotes.toLocaleString()} votes</span>
+//                   {grandTotal>0 && <span> ({((leader.totalVotes/grandTotal)*100).toFixed(1)}%)</span>}
+//                   {lastUpdate && !mobile && (
+//                     <span style={{ marginLeft:14, color:'rgba(180,220,200,0.3)' }}>
+//                       · Updated {formatDistanceToNow(lastUpdate,{addSuffix:true})}
+//                     </span>
+//                   )}
+//                 </p>
+//               )}
+//             </div>
+//             {parties.length>0 && (
+//               <div style={{
+//                 display:'flex', gap:8,
+//                 flexWrap:mobile?'nowrap':'wrap',
+//                 overflowX:mobile?'auto':'visible',
+//                 paddingBottom:mobile?4:0,
+//                 width:mobile?'100%':'auto',
+//                 scrollbarWidth:'none',
+//               }}>
+//                 {parties.slice(0,mobile?4:5).map((p,i) => {
+//                   const { label } = partyColor(p.party,i);
+//                   const isAPC = (p.party??'').toUpperCase()==='APC';
+//                   return (
+//                     <div key={p.party} style={{
+//                       padding:mobile?'10px 14px':'14px 20px',
+//                       textAlign:'center', minWidth:mobile?72:90, flexShrink:0,
+//                       background:isAPC?'rgba(0,107,53,0.18)':'var(--surface)',
+//                       border:`1px solid ${isAPC?'rgba(0,107,53,0.55)':'var(--border)'}`,
+//                       borderRadius:10,
+//                     }}>
+//                       <p style={{ fontFamily:'var(--display)', fontSize:mobile?15:19,
+//                         fontWeight:800, color:label, letterSpacing:'-0.03em', lineHeight:1 }}>
+//                         {p.totalVotes.toLocaleString()}
+//                       </p>
+//                       <p style={{ fontFamily:'var(--mono)', fontSize:mobile?9:10,
+//                         marginTop:4, letterSpacing:'0.1em', color:'var(--muted)',
+//                         fontWeight:isAPC?500:400 }}>
+//                         {p.party}
+//                       </p>
+//                     </div>
+//                   );
+//                 })}
+//               </div>
+//             )}
+//           </div>
+//         </div>
+//       </div>
+
+//       {/* ══ MAIN ════════════════════════════════════════════════════ */}
+//       <main style={{ maxWidth:1700, margin:'0 auto',
+//         padding:mobile?`20px ${px}px 60px`:`28px ${px}px 80px` }}>
+
+//         {error && (
+//           <div style={{ marginBottom:16, padding:'10px 14px',
+//             background:'rgba(220,38,38,0.08)', border:'1px solid rgba(220,38,38,0.2)',
+//             borderRadius:10, fontSize:12, color:'#FCA5A5',
+//             display:'flex', gap:8, alignItems:'center' }}>
+//             ⚠ {error}
+//           </div>
+//         )}
+
+//         {/* Stat blocks */}
+//         <div style={{
+//           display:'grid',
+//           gridTemplateColumns:mobile?'repeat(2,1fr)':'repeat(auto-fit,minmax(175px,1fr))',
+//           gap:mobile?8:12, marginBottom:mobile?16:24,
+//         }}>
+//           <StatBlock label="Total votes cast"  value={grandTotal}
+//             sub={`${reportingWards} ward${reportingWards!==1?'s':''} reporting`}
+//             accent="var(--green)" flash={flashStats} index={0}/>
+//           <StatBlock label="APC total votes" value={apcData?.totalVotes??0}
+//             sub={apcPct?`${apcPct}% of all votes`:'Awaiting data'}
+//             accent="#4ADE80" flash={flashStats} index={1}/>
+//           <StatBlock label="APC margin" value={apcMargin??'—'}
+//             sub="Lead over 2nd place" accent="#86EFAC" flash={flashStats} index={2}/>
+//           <StatBlock label="Wards reporting" value={reportingWards}
+//             sub="Results received" accent="var(--gold)" flash={flashStats} index={3}/>
+//           <StatBlock label="Parties" value={parties.length}
+//             sub="Contested" accent="#3B82F6" index={4}/>
+//           {leader
+//             ? <StatBlock label="Current leader" value={leader.party}
+//                 sub={`${leader.totalVotes.toLocaleString()} · ${
+//                   grandTotal>0?((leader.totalVotes/grandTotal)*100).toFixed(1):0}%`}
+//                 accent={partyColor(leader.party,0).bar} flash={flashStats} index={5}/>
+//             : <StatBlock label="Current leader" value="—" sub="Awaiting results" index={5}/>
+//           }
+//         </div>
+
+//         {loading && (
+//           <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+//             {[160,220,600].map((h,i) => <Skeleton key={i} h={h} delay={i*100}/>)}
+//           </div>
+//         )}
+
+//         {!loading && (
+//           <div style={{ display:'flex', flexDirection:'column', gap }}>
+
+//             {/* Vote share bars */}
+//             <Panel style={{ padding:panelPad }}>
+//               <SectionHeader label="Vote share" right={`${parties.length} parties · ${scopeLabel}`}/>
+//               {parties.length===0
+//                 ? <p style={{ fontSize:12, color:'var(--muted)', padding:'16px 0' }}>No data yet.</p>
+//                 : parties.map((p,i) => (
+//                   <VoteBar key={p.party} party={p.party} votes={p.totalVotes}
+//                     total={grandTotal} rank={i} delay={i*90} isLeader={i===0}/>
+//                 ))
+//               }
+//             </Panel>
+
+//             {/* Charts */}
+//             <div style={{ display:'grid',
+//               gridTemplateColumns:mobile?'1fr':'minmax(0,1.6fr) minmax(0,1fr)', gap }}>
+//               <Panel style={{ padding:panelPad }}>
+//                 <SectionHeader label="Votes by party" right="Bar chart"/>
+//                 <VotesBarChart parties={parties}/>
+//               </Panel>
+//               <Panel style={{ padding:panelPad }}>
+//                 <SectionHeader label="Vote distribution" right="Pie chart"/>
+//                 <VotesPieChart parties={parties} grandTotal={grandTotal}/>
+//               </Panel>
+//             </div>
+
+//             {/* ══ LGA TABLE — Excel-style, all expanded ══════════════ */}
+//             {lcdas.length > 0 ? (
+//               <LGATable
+//                 lcdas={lcdas}
+//                 newestWardId={newestWardId}
+//                 backendUrl={backendUrl}
+//               />
+//             ) : (
+//               <Panel style={{ padding:panelPad }}>
+//                 <SectionHeader label="LGA / LCDA Results"/>
+//                 <p style={{ fontSize:12, color:'var(--muted)', padding:'16px 0' }}>
+//                   Loading LGA list…
+//                 </p>
+//               </Panel>
+//             )}
+
+//             {/* Live feed + results table */}
+//             <div style={{ display:'grid',
+//               gridTemplateColumns:mobile?'1fr':'minmax(0,1fr) minmax(0,2fr)',
+//               gap, ...(desktop?{alignItems:'start'}:{}) }}>
+//               <Panel style={{ padding:panelPad,
+//                 ...(mobile?{maxHeight:340}:{maxHeight:440,display:'flex',flexDirection:'column',overflow:'hidden'}) }}>
+//                 <LiveFeed
+//                   results={eventLog.length>0 ? eventLog : results.slice(0,15)}
+//                   newestId={newestWardId}
+//                 />
+//               </Panel>
+//               <Panel style={{ padding:panelPad,
+//                 ...(mobile?{}:{maxHeight:440,display:'flex',flexDirection:'column',overflow:'hidden'}) }}>
+//                 <SectionHeader
+//                   label="Submitted ward results"
+//                   right={`${results.length} record${results.length!==1?'s':''}`}
+//                 />
+//                 <div style={{ overflowY:'auto', flex:1 }}>
+//                   <ResultsTable results={results} newestId={newestWardId}/>
+//                 </div>
+//               </Panel>
+//             </div>
+
+//           </div>
+//         )}
+
+//         {!loading && results.length===0 && !error && (
+//           <div style={{ marginTop:24, padding:mobile?'48px 16px':'80px 24px',
+//             textAlign:'center', background:'var(--surface)',
+//             border:'1px solid var(--border)', borderRadius:16 }}>
+//             <div style={{ marginBottom:16, display:'inline-block' }}>
+//               <APCMark size={mobile?40:52}/>
+//             </div>
+//             <h3 style={{ fontFamily:'var(--display)', fontSize:mobile?20:24,
+//               fontWeight:800, color:'var(--text)', marginBottom:10, letterSpacing:'-0.02em' }}>
+//               Awaiting First Results
+//             </h3>
+//             <p style={{ fontFamily:'var(--mono)', fontSize:12, color:'var(--muted)',
+//               maxWidth:320, margin:'0 auto', lineHeight:1.8 }}>
+//               {scope==='all'
+//                 ? 'As ward agents submit results, they will appear here in real-time.'
+//                 : `No results yet for ${scopeLabel}.`}
+//             </p>
+//             <div style={{ marginTop:20 }}><LivePulse active={connected}/></div>
+//           </div>
+//         )}
+//       </main>
+
+//       {/* ══ FOOTER ══════════════════════════════════════════════════ */}
+//       <footer style={{ borderTop:'1px solid var(--border)', background:'var(--surface)',
+//         padding:mobile?'12px 16px':'14px 24px' }}>
+//         <div style={{ maxWidth:1700, margin:'0 auto', display:'flex', alignItems:'center',
+//           justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
+//           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+//             <APCMark size={mobile?16:20}/>
+//             <span style={{ fontFamily:'var(--display)', fontWeight:700,
+//               fontSize:mobile?11:13, color:'var(--text)' }}>APC Results Centre</span>
+//             {!mobile && <span style={{ fontFamily:'var(--mono)', fontSize:10, color:'var(--muted)' }}>
+//               All Progressives Congress · {scopeLabel}
+//             </span>}
+//           </div>
+//           <div style={{ display:'flex', alignItems:'center', gap:mobile?12:20,
+//             fontFamily:'var(--mono)', fontSize:10, color:'var(--muted)' }}>
+//             <LivePulse active={connected}/>
+//             <span>{reportingWards} ward{reportingWards!==1?'s':''}</span>
+//             <span>{format(clock,mobile?'HH:mm':'HH:mm · dd MMM yyyy')}</span>
+//           </div>
+//         </div>
+//       </footer>
+//     </div>
+//   );
+// }
