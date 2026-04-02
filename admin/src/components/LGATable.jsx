@@ -1,5 +1,6 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSocket } from '../hooks/useSocket';
 
 // ─── Party colour config (matches Dashboard palette) ────────────────────────
 const PARTY_META = {
@@ -280,7 +281,7 @@ function WardPanel({ lga, backendUrl, newestWardId }) {
 
 // ─── LGA Row (collapsed) ─────────────────────────────────────────────────────
 // lgaSummary is now passed as a prop from LGATable — no internal fetch.
-function LGARow({ lga, rank, isOpen, onToggle, lgaSummary, newestWardId, backendUrl }) {
+function LGARow({ lga, rank, isOpen, onToggle, lgaSummary, newestWardId, backendUrl, highlight }) {
   const apcData    = lgaSummary?.parties?.find(p => p.party === 'APC');
   const apcVotes   = apcData?.totalVotes ?? 0;
   const total      = lgaSummary?.grandTotal ?? 0;
@@ -289,13 +290,13 @@ function LGARow({ lga, rank, isOpen, onToggle, lgaSummary, newestWardId, backend
 
   return (
     <>
-      {/* ── Collapsed LGA header row ── */}
       <tr
         className={`
           cursor-pointer select-none border-b transition-all duration-150
           ${isOpen
             ? 'bg-emerald-950/40 border-emerald-900/50'
             : 'border-white/5 hover:bg-white/[0.025]'}
+          ${highlight ? 'animate-[border-flash_0.7s_ease_2]' : ''}
         `}
         onClick={onToggle}
       >
@@ -393,9 +394,7 @@ function LGARow({ lga, rank, isOpen, onToggle, lgaSummary, newestWardId, backend
             {isOpen ? 'Close' : 'View'}
           </span>
         </td>
-      </tr>
-
-      {/* ── Expanded ward panel ── */}
+           </tr>
       {isOpen && (
         <WardPanel
           lga={lga}
@@ -409,52 +408,116 @@ function LGARow({ lga, rank, isOpen, onToggle, lgaSummary, newestWardId, backend
 
 // ─── Main export ─────────────────────────────────────────────────────────────
 export default function LGATable({ lcdas, summary, newestWardId, backendUrl }) {
-  const [openId,     setOpenId]     = useState(null);
-  const [search,     setSearch]     = useState('');
-  const [sortKey,    setSortKey]    = useState('apc-desc');
-  // FIX: All LGA summaries fetched here, staggered, passed down as props.
+  const [openId, setOpenId] = useState(null);
+  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState('apc-desc');
   const [summaryMap, setSummaryMap] = useState({});
+  const [pendingUpdates, setPendingUpdates] = useState(new Map()); // Track pending LGA updates
   const tbodyRef = useRef(null);
+  
+  // Connect to real-time updates
+  const { connected, newResult, updatedResult } = useSocket();
 
-  // Staggered fetch — 80 ms between requests keeps us under any sane rate limit.
-  // Rows populate progressively as each summary arrives.
-  // If your backend supports a bulk endpoint, replace this with a single
-  // fetch(`${backendUrl}/results/summaries?scope=lcda&ids=${lcdas.map(l=>l._id).join(',')}`)
-  // that returns { summaries: { [id]: summaryObject } }.
+  // ─── INITIAL DATA LOAD (ONE BATCH REQUEST - NO POLLING!) ───────────────────
+ useEffect(() => {
+  if (!lcdas.length) return;
+
+  const fetchAllSummaries = async () => {
+    try {
+      const ids = lcdas.map(l => l._id).join(',');
+      // Use the new batch endpoint
+      const response = await fetch(`${backendUrl}/results/summaries/batch?ids=${ids}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setSummaryMap(data.summaries);
+      }
+    } catch (error) {
+      console.error('Failed to fetch batch summaries:', error);
+    }
+  };
+
+
+    fetchAllSummaries();
+  }, [lcdas, backendUrl]); // Only runs when lcdas changes, NOT on every refreshKey
+
+  // ─── REAL-TIME UPDATE HANDLER ──────────────────────────────────────────────
   useEffect(() => {
-    if (!lcdas.length) return;
+    if (!newResult) return;
 
-    let cancelled = false;
-
-    const fetchStaggered = async () => {
-      const map = {};
-      for (let i = 0; i < lcdas.length; i++) {
-        if (cancelled) break;
-        try {
-          const data = await fetch(
-            `${backendUrl}/results/summary?scope=lcda&id=${lcdas[i]._id}`
-          ).then(r => r.json());
-          map[lcdas[i]._id] = data;
-          if (!cancelled) setSummaryMap(prev => ({ ...prev, [lcdas[i]._id]: data }));
-        } catch (_) {
-          // swallow per-LGA errors; row just shows skeletons
+    const result = newResult.result;
+    const affectedLgaId = result.lcda || result.lgaId;
+    
+    if (!affectedLgaId) return;
+    
+    // Mark this LGA for update
+    setPendingUpdates(prev => new Map(prev).set(affectedLgaId, Date.now()));
+    
+    // Fetch just this LGA's updated summary
+    const fetchUpdatedLga = async () => {
+      try {
+        const response = await fetch(
+          `${backendUrl}/results/summary?scope=lcda&id=${affectedLgaId}`
+        );
+        
+        if (response.status === 429) {
+          // If rate limited, retry after delay
+          setTimeout(() => fetchUpdatedLga(), 1000);
+          return;
         }
-        if (i < lcdas.length - 1) {
-          await new Promise(r => setTimeout(r, 80));
-        }
+        
+        const updatedSummary = await response.json();
+        
+        setSummaryMap(prev => ({
+          ...prev,
+          [affectedLgaId]: updatedSummary
+        }));
+        
+        // Clear pending update after 2 seconds
+        setTimeout(() => {
+          setPendingUpdates(prev => {
+            const newMap = new Map(prev);
+            newMap.delete(affectedLgaId);
+            return newMap;
+          });
+        }, 2000);
+        
+      } catch (error) {
+        console.error('Failed to fetch updated LGA summary:', error);
       }
     };
+    
+    fetchUpdatedLga();
+    
+  }, [newResult, backendUrl]);
 
-    fetchStaggered();
-    return () => { cancelled = true; };
-  }, [lcdas, backendUrl]);
+  // Handle result status updates (verified/rejected)
+  useEffect(() => {
+    if (!updatedResult) return;
+    
+    const result = updatedResult.result;
+    const affectedLgaId = result.lcda || result.lgaId;
+    
+    if (affectedLgaId) {
+      // Refresh the affected LGA summary
+      fetch(`${backendUrl}/results/summary?scope=lcda&id=${affectedLgaId}`)
+        .then(res => res.json())
+        .then(updatedSummary => {
+          setSummaryMap(prev => ({
+            ...prev,
+            [affectedLgaId]: updatedSummary
+          }));
+        })
+        .catch(console.error);
+    }
+  }, [updatedResult, backendUrl]);
 
+  // Filter and sort LGAs
   const filtered = lcdas
     .filter(l => !search || l.name.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
       if (sortKey === 'name-asc') return a.name.localeCompare(b.name);
       if (sortKey === 'apc-desc') {
-        // Sort by APC votes descending using already-fetched summary data
         const aApc = summaryMap[a._id]?.parties?.find(p => p.party === 'APC')?.totalVotes ?? -1;
         const bApc = summaryMap[b._id]?.parties?.find(p => p.party === 'APC')?.totalVotes ?? -1;
         return bApc - aApc;
@@ -482,6 +545,17 @@ export default function LGATable({ lcdas, summary, newestWardId, backendUrl }) {
           <span className="text-[10px] font-mono text-slate-600 ml-1">
             {filtered.length} area{filtered.length !== 1 ? 's' : ''}
           </span>
+          
+          {/* Real-time indicator */}
+          {connected && (
+            <span className="inline-flex items-center gap-1.5 ml-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="text-[9px] font-mono text-emerald-500">Live</span>
+            </span>
+          )}
         </div>
 
         {/* Search */}
@@ -508,14 +582,6 @@ export default function LGATable({ lcdas, summary, newestWardId, backendUrl }) {
           <option value="apc-desc">Sort: APC votes ↓</option>
           <option value="name-asc">Sort: A – Z</option>
         </select>
-
-        {/* Loading indicator — shows while summaries are still trickling in */}
-        {Object.keys(summaryMap).length < lcdas.length && lcdas.length > 0 && (
-          <span className="inline-flex items-center gap-1.5 text-[9px] font-mono text-slate-600">
-            <span className="w-3 h-3 border border-slate-700 border-t-amber-600/60 rounded-full animate-spin" />
-            {Object.keys(summaryMap).length}/{lcdas.length}
-          </span>
-        )}
 
         {/* Click-to-expand hint */}
         <span className="text-[9px] font-mono text-slate-600 hidden sm:block">
@@ -548,19 +614,23 @@ export default function LGATable({ lcdas, summary, newestWardId, backendUrl }) {
                 </td>
               </tr>
             )}
-            {filtered.map((lga, i) => (
-              <LGARow
-                key={lga._id}
-                id={`lga-row-${lga._id}`}
-                lga={lga}
-                rank={i + 1}
-                isOpen={openId === lga._id}
-                onToggle={() => toggle(lga._id)}
-                lgaSummary={summaryMap[lga._id] ?? null}
-                newestWardId={newestWardId}
-                backendUrl={backendUrl}
-              />
-            ))}
+            {filtered.map((lga, i) => {
+              const hasUpdate = pendingUpdates.has(lga._id);
+              return (
+                <LGARow
+                  key={lga._id}
+                  id={`lga-row-${lga._id}`}
+                  lga={lga}
+                  rank={i + 1}
+                  isOpen={openId === lga._id}
+                  onToggle={() => toggle(lga._id)}
+                  lgaSummary={summaryMap[lga._id] ?? null}
+                  newestWardId={newestWardId}
+                  backendUrl={backendUrl}
+                  highlight={hasUpdate} // Pass highlight prop
+                />
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -568,659 +638,3 @@ export default function LGATable({ lcdas, summary, newestWardId, backendUrl }) {
   );
 }
 
-
-
-/**
- * components/LGATable.jsx
- *
- * Excel-style results table matching the CHAIRMANSHIP RESULT COLLATION sheet.
- *
- * Layout per LGA:
- *  - Header row: LGA name, code, APC total, PDP, LP, total votes, net votes, ranking
- *  - Ward sub-rows: all wards expanded inline (no click needed), ranked by APC votes
- *  - Inline mini bar chart showing each party's share per LGA
- *  - Inline donut showing APC % share
- *
- * All LGA summaries are fetched once in this component (staggered 80ms apart)
- * to avoid 429 rate limiting. Ward data is fetched lazily but in parallel once
- * the summary map is populated.
- *
- * Props:
- *   lcdas        : [{ _id, name, code }]
- *   newestWardId : string | null          — from socket, for flash highlight
- *   backendUrl   : string
- */
-
-// import { useState, useEffect, useCallback, useRef } from 'react';
-
-// // ─── Helpers ──────────────────────────────────────────────────────────────────
-// const fmt  = n  => (n ?? 0).toLocaleString();
-// const pct  = (a, b) => (b > 0 ? ((a / b) * 100).toFixed(1) : '0.0');
-// const sign = n  => n > 0 ? `+${fmt(n)}` : fmt(n);
-
-// // ─── Party config ─────────────────────────────────────────────────────────────
-// const PARTIES = {
-//   APC:  { color: '#22c55e', bg: 'rgba(34,197,94,0.15)',   text: '#4ade80' },
-//   PDP:  { color: '#3b82f6', bg: 'rgba(59,130,246,0.15)',  text: '#93c5fd' },
-//   LP:   { color: '#f59e0b', bg: 'rgba(245,158,11,0.15)',  text: '#fcd34d' },
-//   NNPP: { color: '#a855f7', bg: 'rgba(168,85,247,0.15)',  text: '#c4b5fd' },
-// };
-// const partyColor = p => PARTIES[(p||'').toUpperCase().trim()] || { color:'#64748b', bg:'rgba(100,116,139,0.15)', text:'#94a3b8' };
-
-// // ─── Rank medal ───────────────────────────────────────────────────────────────
-// function RankBadge({ rank }) {
-//   const medals = { 1:'🥇', 2:'🥈', 3:'🥉' };
-//   if (medals[rank]) return <span style={{ fontSize:13 }}>{medals[rank]}</span>;
-//   return (
-//     <span style={{
-//       fontFamily:'var(--mono)', fontSize:9, fontWeight:600,
-//       color: rank <= 10 ? '#f59e0b' : 'rgba(180,220,200,0.3)',
-//       minWidth:18, textAlign:'center',
-//     }}>{rank}</span>
-//   );
-// }
-
-// // ─── Inline horizontal bar chart (per-party stacked) ─────────────────────────
-// function PartyBarChart({ parties, total }) {
-//   if (!parties.length || !total) return null;
-//   return (
-//     <div style={{ display:'flex', height:6, borderRadius:3, overflow:'hidden', gap:1 }}>
-//       {parties.map(({ party, totalVotes }) => {
-//         const w = pct(totalVotes, total);
-//         const c = partyColor(party);
-//         if (parseFloat(w) < 0.5) return null;
-//         return (
-//           <div key={party} title={`${party}: ${fmt(totalVotes)} (${w}%)`} style={{
-//             width:`${w}%`, background:c.color,
-//             transition:'width 0.8s cubic-bezier(0.22,1,0.36,1)',
-//             minWidth:2,
-//           }}/>
-//         );
-//       })}
-//     </div>
-//   );
-// }
-
-// // ─── SVG Donut (APC % share) ─────────────────────────────────────────────────
-// function DonutChart({ apcVotes, total, size = 44 }) {
-//   const r    = 16;
-//   const circ = 2 * Math.PI * r;
-//   const apcPct  = total > 0 ? apcVotes / total : 0;
-//   const dash    = apcPct * circ;
-//   const gap     = circ - dash;
-
-//   return (
-//     <svg width={size} height={size} viewBox="0 0 40 40" style={{ flexShrink:0 }}>
-//       <circle cx="20" cy="20" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="5"/>
-//       <circle cx="20" cy="20" r={r} fill="none" stroke="#22c55e" strokeWidth="5"
-//         strokeDasharray={`${dash} ${gap}`}
-//         strokeLinecap="round"
-//         transform="rotate(-90 20 20)"
-//         style={{ transition:'stroke-dasharray 1s cubic-bezier(0.22,1,0.36,1)' }}
-//       />
-//       <text x="20" y="20" textAnchor="middle" dominantBaseline="central"
-//         fill="#4ade80" fontSize="7.5" fontWeight="700" fontFamily="monospace">
-//         {(apcPct*100).toFixed(0)}%
-//       </text>
-//     </svg>
-//   );
-// }
-
-// // ─── Ward row ─────────────────────────────────────────────────────────────────
-// function WardRow({ ward, result, rank, isNewest, maxApc }) {
-//   const hasResult = !!result;
-//   const apc   = result?.results?.find(r => r.party === 'APC')?.votes ?? 0;
-//   const pdp   = result?.results?.find(r => r.party === 'PDP')?.votes ?? 0;
-//   const lp    = result?.results?.find(r => r.party === 'LP')?.votes  ?? 0;
-//   const total = result?.totalVotes ?? 0;
-//   const net   = apc - pdp - lp;
-//   const barW  = maxApc > 0 ? Math.round((apc / maxApc) * 100) : 0;
-
-//   return (
-//     <tr style={{
-//       borderBottom:'1px solid rgba(0,107,53,0.08)',
-//       background: isNewest
-//         ? 'rgba(201,168,76,0.07)'
-//         : rank % 2 === 0 ? 'rgba(255,255,255,0.01)' : 'transparent',
-//       transition:'background 2s ease',
-//       opacity: hasResult ? 1 : 0.45,
-//     }}>
-//       {/* Rank */}
-//       <td style={{ paddingLeft:36, paddingRight:8, paddingTop:7, paddingBottom:7, width:52 }}>
-//         <div style={{ display:'flex', alignItems:'center', gap:5 }}>
-//           <RankBadge rank={rank}/>
-//         </div>
-//       </td>
-
-//       {/* Ward name */}
-//       <td style={{ padding:'7px 8px', minWidth:160 }}>
-//         <div>
-//           <p style={{ fontFamily:'var(--mono)', fontSize:11, color:'var(--text)',
-//             fontWeight:500, lineHeight:1.2 }}>{ward.name}</p>
-//           <p style={{ fontFamily:'var(--mono)', fontSize:9, color:'rgba(180,220,200,0.35)',
-//             marginTop:2 }}>Ward {ward.code} · {result?.pollingUnits ?? '—'} PUs</p>
-//         </div>
-//       </td>
-
-//       {/* APC with mini bar */}
-//       <td style={{ padding:'7px 10px', textAlign:'right', minWidth:110 }}>
-//         {hasResult ? (
-//           <div>
-//             <span style={{ fontFamily:'var(--mono)', fontSize:12, fontWeight:700, color:'#4ade80' }}>
-//               {fmt(apc)}
-//             </span>
-//             <div style={{ marginTop:3, height:3, background:'rgba(255,255,255,0.06)', borderRadius:2, overflow:'hidden' }}>
-//               <div style={{
-//                 width:`${barW}%`, height:'100%', background:'#22c55e', borderRadius:2,
-//                 transition:'width 0.8s cubic-bezier(0.22,1,0.36,1)',
-//               }}/>
-//             </div>
-//           </div>
-//         ) : <span style={{ fontFamily:'var(--mono)', fontSize:10, color:'rgba(180,220,200,0.2)' }}>—</span>}
-//       </td>
-
-//       {/* PDP */}
-//       <td style={{ padding:'7px 10px', textAlign:'right', minWidth:80 }}>
-//         {hasResult
-//           ? <span style={{ fontFamily:'var(--mono)', fontSize:11, color:'#93c5fd' }}>{fmt(pdp)}</span>
-//           : <span style={{ fontFamily:'var(--mono)', fontSize:10, color:'rgba(180,220,200,0.2)' }}>—</span>}
-//       </td>
-
-//       {/* LP */}
-//       <td style={{ padding:'7px 10px', textAlign:'right', minWidth:80 }}>
-//         {hasResult
-//           ? <span style={{ fontFamily:'var(--mono)', fontSize:11, color:'#fcd34d' }}>{fmt(lp)}</span>
-//           : <span style={{ fontFamily:'var(--mono)', fontSize:10, color:'rgba(180,220,200,0.2)' }}>—</span>}
-//       </td>
-
-//       {/* Total votes */}
-//       <td style={{ padding:'7px 10px', textAlign:'right', minWidth:90 }}>
-//         {hasResult
-//           ? <span style={{ fontFamily:'var(--mono)', fontSize:11, color:'rgba(180,220,200,0.6)' }}>{fmt(total)}</span>
-//           : <span style={{ fontFamily:'var(--mono)', fontSize:10, color:'rgba(180,220,200,0.2)' }}>—</span>}
-//       </td>
-
-//       {/* Net votes (APC - others) */}
-//       <td style={{ padding:'7px 10px', textAlign:'right', minWidth:90 }}>
-//         {hasResult
-//           ? <span style={{ fontFamily:'var(--mono)', fontSize:11, fontWeight:600,
-//               color: net >= 0 ? '#86efac' : '#fca5a5' }}>
-//               {sign(net)}
-//             </span>
-//           : <span style={{ fontFamily:'var(--mono)', fontSize:10, color:'rgba(180,220,200,0.2)' }}>—</span>}
-//       </td>
-
-//       {/* APC % */}
-//       <td style={{ padding:'7px 10px', textAlign:'right', minWidth:60 }}>
-//         {hasResult
-//           ? <span style={{ fontFamily:'var(--mono)', fontSize:10, color:'#f59e0b' }}>
-//               {pct(apc, total)}%
-//             </span>
-//           : <span style={{ fontFamily:'var(--mono)', fontSize:10, color:'rgba(180,220,200,0.2)' }}>—</span>}
-//       </td>
-
-//       {/* Status */}
-//       <td style={{ padding:'7px 12px', textAlign:'right' }}>
-//         {hasResult ? (
-//           <span style={{
-//             fontFamily:'var(--mono)', fontSize:8, fontWeight:600,
-//             textTransform:'uppercase', letterSpacing:'0.08em',
-//             padding:'2px 6px', borderRadius:3,
-//             background: result.status === 'verified' ? 'rgba(34,197,94,0.15)'
-//               : result.status === 'rejected' ? 'rgba(239,68,68,0.15)'
-//               : 'rgba(245,158,11,0.15)',
-//             color: result.status === 'verified' ? '#4ade80'
-//               : result.status === 'rejected' ? '#fca5a5'
-//               : '#fcd34d',
-//           }}>
-//             {result.status ?? 'pending'}
-//           </span>
-//         ) : (
-//           <span style={{ fontFamily:'var(--mono)', fontSize:8, color:'rgba(180,220,200,0.2)' }}>
-//             awaiting
-//           </span>
-//         )}
-//       </td>
-//     </tr>
-//   );
-// }
-
-// // ─── LGA subtotal row (pinned above ward rows) ────────────────────────────────
-// function LGAHeaderRow({ lga, summary, wards, results, rank, isNew }) {
-//   const apc   = summary?.parties?.find(p => p.party === 'APC')?.totalVotes ?? 0;
-//   const pdp   = summary?.parties?.find(p => p.party === 'PDP')?.totalVotes ?? 0;
-//   const lp    = summary?.parties?.find(p => p.party === 'LP')?.totalVotes  ?? 0;
-//   const total = summary?.grandTotal ?? 0;
-//   const net   = apc - pdp - lp;
-//   const reporting = summary?.reportingUnits ?? 0;
-//   const wardCount = wards.length;
-
-//   return (
-//     <tr style={{
-//       background: isNew
-//         ? 'rgba(201,168,76,0.12)'
-//         : 'rgba(0,107,53,0.18)',
-//       borderTop:'1px solid rgba(0,107,53,0.35)',
-//       borderBottom:'1px solid rgba(0,107,53,0.2)',
-//       transition:'background 2s ease',
-//     }}>
-//       {/* Rank */}
-//       <td style={{ padding:'10px 8px 10px 16px', width:52 }}>
-//         <RankBadge rank={rank}/>
-//       </td>
-
-//       {/* LGA name + donut + bar */}
-//       <td style={{ padding:'10px 8px', minWidth:200 }}>
-//         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-//           <DonutChart apcVotes={apc} total={total}/>
-//           <div style={{ minWidth:0 }}>
-//             <p style={{ fontFamily:'var(--display)', fontSize:13, fontWeight:700,
-//               color:'var(--text)', lineHeight:1.1 }}>{lga.name}</p>
-//             <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:3 }}>
-//               <span style={{ fontFamily:'var(--mono)', fontSize:8,
-//                 color:'rgba(180,220,200,0.4)' }}>{lga.code}</span>
-//               <span style={{
-//                 fontFamily:'var(--mono)', fontSize:8, fontWeight:600,
-//                 letterSpacing:'0.08em', padding:'1px 5px', borderRadius:2,
-//                 background: reporting === wardCount
-//                   ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.12)',
-//                 color: reporting === wardCount ? '#4ade80' : '#fcd34d',
-//               }}>
-//                 {reporting}/{wardCount} wards
-//               </span>
-//             </div>
-//             {total > 0 && (
-//               <div style={{ marginTop:5 }}>
-//                 <PartyBarChart
-//                   parties={summary?.parties ?? []}
-//                   total={total}
-//                 />
-//               </div>
-//             )}
-//           </div>
-//         </div>
-//       </td>
-
-//       {/* APC */}
-//       <td style={{ padding:'10px', textAlign:'right' }}>
-//         <span style={{ fontFamily:'var(--mono)', fontSize:14, fontWeight:800, color:'#4ade80' }}>
-//           {total ? fmt(apc) : '—'}
-//         </span>
-//       </td>
-
-//       {/* PDP */}
-//       <td style={{ padding:'10px', textAlign:'right' }}>
-//         <span style={{ fontFamily:'var(--mono)', fontSize:12, color:'#93c5fd' }}>
-//           {total ? fmt(pdp) : '—'}
-//         </span>
-//       </td>
-
-//       {/* LP */}
-//       <td style={{ padding:'10px', textAlign:'right' }}>
-//         <span style={{ fontFamily:'var(--mono)', fontSize:12, color:'#fcd34d' }}>
-//           {total ? fmt(lp) : '—'}
-//         </span>
-//       </td>
-
-//       {/* Total */}
-//       <td style={{ padding:'10px', textAlign:'right' }}>
-//         <span style={{ fontFamily:'var(--mono)', fontSize:12, color:'rgba(180,220,200,0.7)', fontWeight:600 }}>
-//           {total ? fmt(total) : '—'}
-//         </span>
-//       </td>
-
-//       {/* Net */}
-//       <td style={{ padding:'10px', textAlign:'right' }}>
-//         <span style={{ fontFamily:'var(--mono)', fontSize:12, fontWeight:700,
-//           color: net >= 0 ? '#86efac' : '#fca5a5' }}>
-//           {total ? sign(net) : '—'}
-//         </span>
-//       </td>
-
-//       {/* APC% */}
-//       <td style={{ padding:'10px', textAlign:'right' }}>
-//         <span style={{ fontFamily:'var(--mono)', fontSize:11, color:'#f59e0b', fontWeight:600 }}>
-//           {total ? `${pct(apc,total)}%` : '—'}
-//         </span>
-//       </td>
-
-//       {/* Spacer for status column */}
-//       <td/>
-//     </tr>
-//   );
-// }
-
-// // ─── Ward panel (fetches wards + results for one LGA) ────────────────────────
-// function LGASection({ lga, summary, rank, backendUrl, newestWardId, isNew }) {
-//   const [wards,   setWards]   = useState([]);
-//   const [results, setResults] = useState([]);
-//   const [loading, setLoading] = useState(true);
-//   const loadedRef = useRef(false);
-
-//   const load = useCallback(async () => {
-//     try {
-//       const [wRes, rRes] = await Promise.all([
-//         fetch(`${backendUrl}/results/lcdas/${lga._id}/wards`).then(r => r.json()),
-//         fetch(`${backendUrl}/results?scope=lcda&id=${lga._id}&limit=500`).then(r => r.json()),
-//       ]);
-//       setWards(wRes.wards   ?? []);
-//       setResults(rRes.results ?? []);
-//     } catch (_) {}
-//     finally { setLoading(false); }
-//   }, [lga._id, backendUrl]);
-
-//   useEffect(() => {
-//     load();
-//     loadedRef.current = true;
-//   }, [load]);
-
-//   // Re-fetch when a socket event touches a ward in this LGA
-//   useEffect(() => {
-//     if (!newestWardId || !loadedRef.current) return;
-//     const affected = results.find(r => String(r.ward?._id ?? r.ward) === newestWardId);
-//     const inScope  = wards.find(w => String(w._id) === newestWardId);
-//     if (affected || inScope) load();
-//   }, [newestWardId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-//   const resultByWard = {};
-//   results.forEach(r => { resultByWard[String(r.ward?._id ?? r.ward)] = r; });
-
-//   // Sort: wards with results first (by APC desc), then pending alpha
-//   const withRes    = wards.filter(w => resultByWard[String(w._id)])
-//     .sort((a, b) => {
-//       const av = resultByWard[String(a._id)]?.results?.find(r=>r.party==='APC')?.votes ?? 0;
-//       const bv = resultByWard[String(b._id)]?.results?.find(r=>r.party==='APC')?.votes ?? 0;
-//       return bv - av;
-//     });
-//   const withoutRes = wards.filter(w => !resultByWard[String(w._id)])
-//     .sort((a, b) => a.name.localeCompare(b.name));
-//   const sorted = [...withRes, ...withoutRes];
-
-//   const maxApc = withRes.length > 0
-//     ? Math.max(...withRes.map(w => resultByWard[String(w._id)]?.results?.find(r=>r.party==='APC')?.votes ?? 0))
-//     : 1;
-
-//   return (
-//     <>
-//       <LGAHeaderRow
-//         lga={lga} summary={summary} wards={wards}
-//         results={results} rank={rank} isNew={isNew}
-//       />
-
-//       {/* Ward column sub-headers */}
-//       <tr style={{ background:'rgba(0,0,0,0.3)' }}>
-//         {['#','Ward · Code · PUs','APC ▼','PDP','LP','Total','Net','APC%','Status'].map((h,i) => (
-//           <td key={i} style={{
-//             padding: i===0 ? '4px 8px 4px 36px' : '4px 10px',
-//             fontFamily:'var(--mono)', fontSize:8, fontWeight:600,
-//             textTransform:'uppercase', letterSpacing:'0.14em',
-//             color:'rgba(180,220,200,0.3)',
-//             textAlign: i <= 1 ? 'left' : i === 8 ? 'right' : 'right',
-//           }}>{h}</td>
-//         ))}
-//       </tr>
-
-//       {loading ? (
-//         <tr>
-//           <td colSpan={9} style={{ padding:'12px 36px' }}>
-//             <div style={{ display:'flex', alignItems:'center', gap:8,
-//               fontFamily:'var(--mono)', fontSize:10, color:'rgba(180,220,200,0.3)' }}>
-//               <span style={{
-//                 width:12, height:12, borderRadius:'50%',
-//                 border:'1.5px solid rgba(0,107,53,0.4)', borderTopColor:'#4ade80',
-//                 animation:'spin 0.8s linear infinite', display:'inline-block',
-//               }}/>
-//               Loading wards…
-//             </div>
-//           </td>
-//         </tr>
-//       ) : sorted.length === 0 ? (
-//         <tr>
-//           <td colSpan={9} style={{ padding:'10px 36px',
-//             fontFamily:'var(--mono)', fontSize:10, color:'rgba(180,220,200,0.2)' }}>
-//             No wards configured for this LGA.
-//           </td>
-//         </tr>
-//       ) : (
-//         sorted.map((ward, i) => (
-//           <WardRow
-//             key={ward._id}
-//             ward={ward}
-//             result={resultByWard[String(ward._id)] ?? null}
-//             rank={i + 1}
-//             isNewest={String(ward._id) === newestWardId}
-//             maxApc={maxApc}
-//           />
-//         ))
-//       )}
-
-//       {/* LGA ward total row */}
-//       {results.length > 0 && (() => {
-//         const tApc   = results.reduce((s,r) => s+(r.results?.find(p=>p.party==='APC')?.votes??0),0);
-//         const tPdp   = results.reduce((s,r) => s+(r.results?.find(p=>p.party==='PDP')?.votes??0),0);
-//         const tLp    = results.reduce((s,r) => s+(r.results?.find(p=>p.party==='LP')?.votes??0),0);
-//         const tTotal = results.reduce((s,r) => s+(r.totalVotes??0),0);
-//         const tNet   = tApc - tPdp - tLp;
-//         return (
-//           <tr style={{ background:'rgba(0,107,53,0.1)', borderTop:'1px solid rgba(0,107,53,0.2)' }}>
-//             <td colSpan={2} style={{ padding:'6px 8px 6px 36px',
-//               fontFamily:'var(--mono)', fontSize:9, fontWeight:700,
-//               letterSpacing:'0.12em', textTransform:'uppercase', color:'rgba(34,197,94,0.6)' }}>
-//               Subtotal · {results.length}/{wards.length} wards reporting
-//             </td>
-//             <td style={{ padding:'6px 10px', textAlign:'right', fontFamily:'var(--mono)', fontSize:12, fontWeight:700, color:'#4ade80' }}>{fmt(tApc)}</td>
-//             <td style={{ padding:'6px 10px', textAlign:'right', fontFamily:'var(--mono)', fontSize:11, color:'#93c5fd' }}>{fmt(tPdp)}</td>
-//             <td style={{ padding:'6px 10px', textAlign:'right', fontFamily:'var(--mono)', fontSize:11, color:'#fcd34d' }}>{fmt(tLp)}</td>
-//             <td style={{ padding:'6px 10px', textAlign:'right', fontFamily:'var(--mono)', fontSize:11, color:'rgba(180,220,200,0.6)', fontWeight:600 }}>{fmt(tTotal)}</td>
-//             <td style={{ padding:'6px 10px', textAlign:'right', fontFamily:'var(--mono)', fontSize:11, fontWeight:700, color: tNet>=0?'#86efac':'#fca5a5' }}>{sign(tNet)}</td>
-//             <td style={{ padding:'6px 10px', textAlign:'right', fontFamily:'var(--mono)', fontSize:10, color:'#f59e0b' }}>{pct(tApc,tTotal)}%</td>
-//             <td/>
-//           </tr>
-//         );
-//       })()}
-//     </>
-//   );
-// }
-
-// // ─── Main export ──────────────────────────────────────────────────────────────
-// export default function LGATable({ lcdas, newestWardId, backendUrl }) {
-//   const [summaryMap,  setSummaryMap]  = useState({});   // { [lga._id]: summaryData }
-//   const [newLgaIds,   setNewLgaIds]   = useState(new Set());
-//   const [search,      setSearch]      = useState('');
-//   const [sortKey,     setSortKey]     = useState('apc-desc');
-
-//   // ── Staggered summary fetch ────────────────────────────────────────────────
-//   // 80ms between each request — fills rows progressively, never 429s
-//   useEffect(() => {
-//     if (!lcdas.length) return;
-//     let cancelled = false;
-
-//     const run = async () => {
-//       for (let i = 0; i < lcdas.length; i++) {
-//         if (cancelled) break;
-//         try {
-//           const data = await fetch(
-//             `${backendUrl}/results/summary?scope=lcda&id=${lcdas[i]._id}`
-//           ).then(r => r.json());
-//           const s = data.data ?? data;
-//           if (!cancelled) setSummaryMap(prev => ({
-//             ...prev,
-//             [lcdas[i]._id]: {
-//               parties:        (s.parties ?? []).sort((a,b) => b.totalVotes - a.totalVotes),
-//               grandTotal:     s.grandTotal     ?? 0,
-//               reportingUnits: s.reportingUnits ?? s.reportingWards ?? 0,
-//             },
-//           }));
-//         } catch (_) {}
-//         if (i < lcdas.length - 1) await new Promise(r => setTimeout(r, 80));
-//       }
-//     };
-
-//     run();
-//     return () => { cancelled = true; };
-//   }, [lcdas, backendUrl]);
-
-//   // Flash LGA when newestWardId belongs to it (detected by LGASection re-fetching)
-//   useEffect(() => {
-//     if (!newestWardId) return;
-//     // We flash all LGAs optimistically — LGASection will re-fetch to confirm
-//     // which one actually changed, so this is a no-op visual only
-//   }, [newestWardId]);
-
-//   // ── Sort ──────────────────────────────────────────────────────────────────
-//   const sorted = [...lcdas]
-//     .filter(l => !search || l.name.toLowerCase().includes(search.toLowerCase()))
-//     .sort((a, b) => {
-//       const sa = summaryMap[a._id];
-//       const sb = summaryMap[b._id];
-//       if (sortKey === 'apc-desc') {
-//         const av = sa?.parties?.find(p=>p.party==='APC')?.totalVotes ?? -1;
-//         const bv = sb?.parties?.find(p=>p.party==='APC')?.totalVotes ?? -1;
-//         return bv - av;
-//       }
-//       if (sortKey === 'total-desc') {
-//         return (sb?.grandTotal ?? 0) - (sa?.grandTotal ?? 0);
-//       }
-//       if (sortKey === 'net-desc') {
-//         const netOf = s => {
-//           if (!s) return -Infinity;
-//           const apc = s.parties?.find(p=>p.party==='APC')?.totalVotes ?? 0;
-//           const pdp = s.parties?.find(p=>p.party==='PDP')?.totalVotes ?? 0;
-//           const lp  = s.parties?.find(p=>p.party==='LP')?.totalVotes  ?? 0;
-//           return apc - pdp - lp;
-//         };
-//         return netOf(sb) - netOf(sa);
-//       }
-//       return a.name.localeCompare(b.name);
-//     });
-
-//   const totalFetched = Object.keys(summaryMap).length;
-
-//   return (
-//     <div style={{
-//       background:'var(--surface)',
-//       border:'1px solid var(--border)',
-//       borderRadius:14, overflow:'hidden',
-//     }}>
-//       {/* ── Toolbar ── */}
-//       <div style={{
-//         display:'flex', flexWrap:'wrap', alignItems:'center', gap:12,
-//         padding:'12px 18px',
-//         background:'var(--surface-3)',
-//         borderBottom:'1px solid var(--border)',
-//       }}>
-//         {/* Title */}
-//         <div style={{ display:'flex', alignItems:'center', gap:8, flex:1 }}>
-//           <span style={{ width:3, height:14, borderRadius:2, background:'var(--gold)',
-//             boxShadow:'0 0 8px rgba(201,168,76,0.4)', flexShrink:0 }}/>
-//           <span style={{ fontFamily:'var(--mono)', fontSize:10, fontWeight:600,
-//             letterSpacing:'0.18em', textTransform:'uppercase', color:'var(--gold)' }}>
-//             LGA / LCDA Results
-//           </span>
-//           <span style={{ fontFamily:'var(--mono)', fontSize:10, color:'rgba(180,220,200,0.35)' }}>
-//             {sorted.length} areas
-//           </span>
-//           {totalFetched < lcdas.length && (
-//             <span style={{ display:'inline-flex', alignItems:'center', gap:5,
-//               fontFamily:'var(--mono)', fontSize:9, color:'rgba(180,220,200,0.3)' }}>
-//               <span style={{
-//                 width:10, height:10, borderRadius:'50%',
-//                 border:'1.5px solid rgba(0,107,53,0.4)', borderTopColor:'#4ade80',
-//                 animation:'spin 0.8s linear infinite', display:'inline-block',
-//               }}/>
-//               {totalFetched}/{lcdas.length}
-//             </span>
-//           )}
-//         </div>
-
-//         {/* Search */}
-//         <div style={{ position:'relative' }}>
-//           <svg style={{ position:'absolute', left:8, top:'50%', transform:'translateY(-50%)',
-//             width:12, height:12, color:'rgba(180,220,200,0.4)' }}
-//             fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-//             <path strokeLinecap="round" strokeLinejoin="round"
-//               d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
-//           </svg>
-//           <input
-//             value={search} onChange={e => setSearch(e.target.value)}
-//             placeholder="Search LGA…"
-//             style={{
-//               paddingLeft:28, paddingRight:10, paddingTop:6, paddingBottom:6,
-//               fontFamily:'var(--mono)', fontSize:11,
-//               background:'rgba(255,255,255,0.05)', border:'1px solid rgba(0,107,53,0.3)',
-//               borderRadius:8, color:'var(--text)', outline:'none', width:150,
-//             }}
-//           />
-//         </div>
-
-//         {/* Sort */}
-//         <select
-//           value={sortKey} onChange={e => setSortKey(e.target.value)}
-//           className="scope-select"
-//           style={{ fontSize:10 }}
-//         >
-//           <option value="apc-desc">Sort: APC Votes ↓</option>
-//           <option value="net-desc">Sort: Net Margin ↓</option>
-//           <option value="total-desc">Sort: Total Votes ↓</option>
-//           <option value="name-asc">Sort: A – Z</option>
-//         </select>
-//       </div>
-
-//       {/* ── Global column headers ── */}
-//       <div style={{ overflowX:'auto' }}>
-//         <table style={{ width:'100%', borderCollapse:'collapse', minWidth:760 }}>
-//           <thead>
-//             <tr style={{ borderBottom:'2px solid rgba(0,107,53,0.3)', background:'rgba(0,0,0,0.4)' }}>
-//               {[
-//                 { label:'Rank',        w:52,  align:'left'  },
-//                 { label:'LGA / LCDA',  w:220, align:'left'  },
-//                 { label:'APC',         w:110, align:'right' },
-//                 { label:'PDP',         w:80,  align:'right' },
-//                 { label:'LP',          w:80,  align:'right' },
-//                 { label:'Total Votes', w:90,  align:'right' },
-//                 { label:'Net Margin',  w:90,  align:'right' },
-//                 { label:'APC %',       w:60,  align:'right' },
-//                 { label:'Status',      w:80,  align:'right' },
-//               ].map((col, i) => (
-//                 <th key={i} style={{
-//                   padding: i===0 ? '10px 8px 10px 16px' : '10px',
-//                   fontFamily:'var(--mono)', fontSize:8, fontWeight:700,
-//                   letterSpacing:'0.16em', textTransform:'uppercase',
-//                   color:'rgba(180,220,200,0.45)', textAlign:col.align,
-//                   minWidth:col.w,
-//                 }}>{col.label}</th>
-//               ))}
-//             </tr>
-//           </thead>
-
-//           <tbody>
-//             {sorted.map((lga, i) => (
-//               <LGASection
-//                 key={lga._id}
-//                 lga={lga}
-//                 summary={summaryMap[lga._id] ?? null}
-//                 rank={i + 1}
-//                 backendUrl={backendUrl}
-//                 newestWardId={newestWardId}
-//                 isNew={newLgaIds.has(lga._id)}
-//               />
-//             ))}
-
-//             {sorted.length === 0 && (
-//               <tr>
-//                 <td colSpan={9} style={{ padding:'48px 24px', textAlign:'center',
-//                   fontFamily:'var(--mono)', fontSize:12, color:'rgba(180,220,200,0.25)' }}>
-//                   No LGAs match "{search}"
-//                 </td>
-//               </tr>
-//             )}
-//           </tbody>
-//         </table>
-//       </div>
-
-//       <style>{`
-//         @keyframes spin { to { transform: rotate(360deg); } }
-//       `}</style>
-//     </div>
-//   );
-// }

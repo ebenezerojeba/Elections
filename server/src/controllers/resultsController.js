@@ -144,6 +144,45 @@ export const getSummary = asyncHandler(async (req, res) => {
   });
 });
 
+
+// GET /api/results/summaries/batch?ids=id1,id2,id3
+export const getBatchSummaries = asyncHandler(async (req, res) => {
+  const { ids } = req.query;
+  if (!ids) return res.status(400).json({ message: "No IDs provided" });
+
+  const idArray = ids.split(',').map(id => new mongoose.Types.ObjectId(id));
+
+  const aggregation = await ElectionResult.aggregate([
+    { $match: { lcda: { $in: idArray } } },
+    { $unwind: '$results' },
+    {
+      $group: {
+        _id: { lcda: '$lcda', party: '$results.party' },
+        totalVotes: { $sum: '$results.votes' },
+        grandTotal: { $sum: '$results.votes' } // We'll refine this in project
+      }
+    },
+    {
+      $group: {
+        _id: '$_id.lcda',
+        parties: { 
+          $push: { party: '$_id.party', totalVotes: '$totalVotes' } 
+        },
+        grandTotal: { $sum: '$totalVotes' },
+        reportingUnits: { $addToSet: '$_id.lcda' } // Simplification for batch
+      }
+    }
+  ]);
+
+  // Convert array to a Map for easy frontend lookup: { [id]: data }
+  const summaryMap = {};
+  aggregation.forEach(item => {
+    summaryMap[item._id] = item;
+  });
+
+  res.json({ success: true, summaries: summaryMap });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/results/:id  (public)
 // ─────────────────────────────────────────────────────────────────────────────
