@@ -42,7 +42,6 @@ router.get('/summary', getSummary);
 // In your results routes file
 router.get('/summaries/batch', getBatchSummaries)
 router.get('/:id',     getResultById);
-
 router.post(
   '/',
   protect,
@@ -53,6 +52,7 @@ router.post(
   validate,
   submitResult
 );
+
 
 router.patch('/:id/status', protect, requireAdmin, updateStatus);
 
