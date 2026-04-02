@@ -1219,7 +1219,7 @@ function LGARow({ lga, rank, isOpen, onToggle, lgaSummary, newestWardId, backend
 }
 
 // ─── Mobile LGA Card (for very small screens) ────────────────────────────────
-function MobileLGACard({ lga, backendUrl, rank, isOpen, onToggle, lgaSummary, highlight, screenSize }) {
+function MobileLGACard({ lga, backendUrl, rank, isOpen, onToggle, lgaSummary, highlight, screenSize, newestWardId }) {
   const apcData    = lgaSummary?.parties?.find(p => p.party === 'APC');
   const apcVotes   = apcData?.totalVotes ?? 0;
   const total      = lgaSummary?.grandTotal ?? 0;
