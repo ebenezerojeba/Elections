@@ -75,9 +75,7 @@ export const registerRules = [
   body('lcda')
     .notEmpty().withMessage('LCDA is required')
     .isMongoId().withMessage('Invalid LCDA'),
-  body('ward')
-    .notEmpty().withMessage('Ward is required')
-    .isMongoId().withMessage('Invalid ward'),
+
 ];
 
 export const loginRules = [
