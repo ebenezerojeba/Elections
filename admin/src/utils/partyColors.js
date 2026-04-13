@@ -1,7 +1,7 @@
 // Deterministic color assignment per party name.
 // Same party always gets the same color regardless of render order.
 const PALETTE = [
-  { bg: '#0D0D0D', text: '#ffffff', light: '#f5f5f5', bar: '#0D0D0D' },  // ink
+  { bg: '#48bd36', text: '#ffffff', light: '#f5f5f5', bar: '#48bd36' },  // ink
   { bg: '#00C896', text: '#ffffff', light: '#e6faf5', bar: '#00C896' },  // vote green
   { bg: '#F5A623', text: '#ffffff', light: '#fef8ec', bar: '#F5A623' },  // gold
   { bg: '#FF4D4F', text: '#ffffff', light: '#fff1f1', bar: '#FF4D4F' },  // alert red
