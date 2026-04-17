@@ -725,7 +725,7 @@ export default function LGATable({ lcdas, summary, newestWardId, backendUrl }) {
     if (!updatedResult) return;
     
     const result = updatedResult.result;
-    const affectedLgaId = result.lcda || result.lgaId;
+    const affectedLgaId = result?.lcda || result.lgaId;
     
     if (affectedLgaId) {
       fetch(`${backendUrl}/results/summary?scope=lcda&id=${affectedLgaId}`)

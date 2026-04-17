@@ -2,7 +2,7 @@ import { Router } from 'express';
 import {
   submitResult, getResults, getSummary,
   getResultById, updateStatus,
-  getBatchSummaries,
+  getBatchSummaries, getUpdatedResultsById
 } from '../controllers/resultsController.js';
 import { protect, authorize, requireAdmin } from '../middleware/auth.js';
 import { resultRules, validate } from '../middleware/validators.js';
@@ -42,6 +42,9 @@ router.get('/summary', getSummary);
 // In your results routes file
 router.get('/summaries/batch', getBatchSummaries)
 router.get('/:id',     getResultById);
+// routes/results.js
+router.patch('/:id', protect, requireAdmin, getUpdatedResultsById)
+ 
 router.post(
   '/',
   protect,
