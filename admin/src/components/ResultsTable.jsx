@@ -132,13 +132,20 @@ function PartyBars({ results = [], total = 0 }) {
   );
 }
 
-function MetaRow({ result }) {
+
+
+
+    function MetaRow({ result }) {
+  const str = (v) => !v ? null : typeof v === 'object' ? (v.name ?? '') : v;
+
   const items = [
-    ['State', result.state], ['LGA', result.lga],
-    ['Ward', result.ward],   ['Agent', result.agentName],
+    ['LCDA',  str(result.lcda)],
+    ['Ward',  str(result.ward)],
+    ['Agent', result.agentName],
   ].filter(([, v]) => v);
+
   return (
-    <div style={{
+      <div style={{
       paddingTop: 10, borderTop: '1px solid var(--border)',
       display: 'flex', flexWrap: 'wrap', gap: '5px 18px',
       fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)',
@@ -211,8 +218,8 @@ function MobileCard({ r, isNewest, isExpanded, onToggle, onEditRequest }) {
             display: 'flex', flexWrap: 'wrap', gap: '2px 8px',
             fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)',
           }}>
-            {r.state && <span>{r.state}</span>}
-            {r.lga   && <span>{r.lga}</span>}
+           {r.lcda?.name && <span>{r.lcda.name}</span>}
+  {r.ward?.name && <span>{r.ward.name}</span>}
           </div>
         </div>
 
@@ -320,22 +327,23 @@ export default function ResultsTable({ results = [], newestId = null }) {
     return c;
   }, [localResults]);
 
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return localResults.filter(r => {
-      const matchSearch =
-        r.pollingUnit?.toLowerCase().includes(q) ||
-        r.agentName?.toLowerCase().includes(q)   ||
-        r.state?.toLowerCase().includes(q)       ||
-        r.lga?.toLowerCase().includes(q)         ||
-        r.results?.some(p => p.party.toLowerCase().includes(q));
-      const matchStatus =
-        statusTab === 'all' ||
-        (r.status || 'pending').toLowerCase() === statusTab;
-      return matchSearch && matchStatus;
-    });
-  }, [localResults, search, statusTab]);
-
+const filtered = useMemo(() => {
+  const q = search.toLowerCase();
+  return localResults.filter(r => {
+    const lcdaName = typeof r.lcda === 'object' ? r.lcda?.name : r.lcda;
+    const wardName = typeof r.ward === 'object' ? r.ward?.name : r.ward;
+    const matchSearch =
+      r.pollingUnit?.toLowerCase().includes(q) ||
+      r.agentName?.toLowerCase().includes(q)   ||
+      lcdaName?.toLowerCase().includes(q)      ||
+      wardName?.toLowerCase().includes(q)      ||
+      r.results?.some(p => p.party.toLowerCase().includes(q));
+    const matchStatus =
+      statusTab === 'all' ||
+      (r.status || 'pending').toLowerCase() === statusTab;
+    return matchSearch && matchStatus;
+  });
+}, [localResults, search, statusTab]);
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
       let va = a[sortKey], vb = b[sortKey];
@@ -527,14 +535,14 @@ export default function ResultsTable({ results = [], newestId = null }) {
                             </div>
                           </td>
 
-                          {showLocation && (
-                            <td style={tdX}>
-                              <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)', lineHeight: 1.8 }}>
-                                {r.state && <div>{r.state}</div>}
-                                {r.lga   && <div style={{ opacity: 0.7 }}>{r.lga}</div>}
-                              </div>
-                            </td>
-                          )}
+ {showLocation && (
+  <td style={tdX}>
+    <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)', lineHeight: 1.8 }}>
+      {r.lcda?.name  && <div>{r.lcda.name}</div>}
+      {r.ward?.name  && <div style={{ opacity: 0.7 }}>{r.ward.name}</div>}
+    </div>
+  </td>
+)}
 
                           {showAgent && (
                             <td style={{ ...tdX, fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)' }}>
